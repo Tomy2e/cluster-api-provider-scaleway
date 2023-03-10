@@ -1,0 +1,27 @@
+# permissions for end users to view scalewaymachines.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: scalewaymachine-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: cluster-api-provider-scaleway
+    app.kubernetes.io/part-of: cluster-api-provider-scaleway
+    app.kubernetes.io/managed-by: kustomize
+  name: scalewaymachine-viewer-role
+rules:
+- apiGroups:
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - scalewaymachines
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - scalewaymachines/status
+  verbs:
+  - get

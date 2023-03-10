@@ -7,4 +7,23 @@ layout:
 - go.kubebuilder.io/v3
 projectName: cluster-api-provider-scaleway
 repo: github.com/Tomy2e/cluster-api-provider-scaleway
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: cluster.x-k8s.io
+  group: infrastructure
+  kind: ScalewayCluster
+  path: github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1
+  version: v1beta1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: cluster.x-k8s.io
+  group: infrastructure
+  kind: ScalewayMachine
+  path: github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1
+  version: v1beta1
 version: "3"
