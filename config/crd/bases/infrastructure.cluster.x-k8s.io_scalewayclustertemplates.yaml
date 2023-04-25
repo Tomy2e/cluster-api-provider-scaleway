@@ -63,8 +63,42 @@ spec:
                         - host
                         - port
                         type: object
+                      controlPlaneLoadBalancer:
+                        properties:
+                          type:
+                            default: LB-S
+                            description: Load Balancer commercial offer type.
+                            type: string
+                          zone:
+                            description: Zone where to create the loadbalancer. Must
+                              be in the same region as the cluster. Defaults to the
+                              first zone of the region.
+                            type: string
+                        type: object
+                      failureDomains:
+                        items:
+                          type: string
+                        type: array
+                      network:
+                        properties:
+                          privateNetwork:
+                            properties:
+                              enabled:
+                                type: boolean
+                              id:
+                                description: Set the ID to reuse an existing PrivateNetwork.
+                                type: string
+                            required:
+                            - enabled
+                            type: object
+                        type: object
+                      region:
+                        type: string
+                      scalewaySecretName:
+                        type: string
                     required:
-                    - controlPlaneEndpoint
+                    - region
+                    - scalewaySecretName
                     type: object
                 required:
                 - spec

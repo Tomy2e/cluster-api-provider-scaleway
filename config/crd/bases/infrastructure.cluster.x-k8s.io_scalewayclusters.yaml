@@ -49,13 +49,67 @@ spec:
                 - host
                 - port
                 type: object
+              controlPlaneLoadBalancer:
+                properties:
+                  type:
+                    default: LB-S
+                    description: Load Balancer commercial offer type.
+                    type: string
+                  zone:
+                    description: Zone where to create the loadbalancer. Must be in
+                      the same region as the cluster. Defaults to the first zone of
+                      the region.
+                    type: string
+                type: object
+              failureDomains:
+                items:
+                  type: string
+                type: array
+              network:
+                properties:
+                  privateNetwork:
+                    properties:
+                      enabled:
+                        type: boolean
+                      id:
+                        description: Set the ID to reuse an existing PrivateNetwork.
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                type: object
+              region:
+                type: string
+              scalewaySecretName:
+                type: string
             required:
-            - controlPlaneEndpoint
+            - region
+            - scalewaySecretName
             type: object
           status:
             description: ScalewayClusterStatus defines the observed state of ScalewayCluster
             properties:
+              failureDomains:
+                additionalProperties:
+                  description: FailureDomainSpec is the Schema for Cluster API failure
+                    domains. It allows controllers to understand how many failure
+                    domains a cluster can optionally span across.
+                  properties:
+                    attributes:
+                      additionalProperties:
+                        type: string
+                      description: Attributes is a free form map of attributes an
+                        infrastructure provider might use or require.
+                      type: object
+                    controlPlane:
+                      description: ControlPlane determines if this failure domain
+                        is suitable for use by control plane machines.
+                      type: boolean
+                  type: object
+                description: FailureDomains is a slice of FailureDomains.
+                type: object
               ready:
+                default: false
                 type: boolean
             required:
             - ready

@@ -50,10 +50,20 @@ spec:
                     description: ScalewayMachineSpec defines the desired state of
                       ScalewayMachine
                     properties:
-                      foo:
-                        description: Foo is an example field of ScalewayMachine. Edit
-                          scalewaymachine_types.go to remove/update
+                      image:
                         type: string
+                      providerID:
+                        type: string
+                      publicIP:
+                        type: boolean
+                      rootVolumeSize:
+                        format: int64
+                        type: integer
+                      type:
+                        type: string
+                    required:
+                    - image
+                    - type
                     type: object
                 required:
                 - spec

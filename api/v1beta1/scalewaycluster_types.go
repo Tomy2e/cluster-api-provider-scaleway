@@ -5,14 +5,56 @@ import (
 	clusterv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
+const ClusterFinalizer = "scalewaycluster.infrastructure.cluster.x-k8s.io"
+
 // ScalewayClusterSpec defines the desired state of ScalewayCluster
 type ScalewayClusterSpec struct {
+	// +optional
 	ControlPlaneEndpoint clusterv1beta1.APIEndpoint `json:"controlPlaneEndpoint"`
+
+	// TODO: enforce immutable field(s)
+
+	FailureDomains []string `json:"failureDomains,omitempty"`
+
+	Region string `json:"region"`
+
+	// +optional
+	Network NetworkSpec `json:"network"`
+
+	// +optional
+	ControlPlaneLoadBalancer *LoadBalancerSpec `json:"controlPlaneLoadBalancer"`
+
+	ScalewaySecretName string `json:"scalewaySecretName"`
+}
+
+type NetworkSpec struct {
+	// +optional
+	PrivateNetwork *PrivateNetworkSpec `json:"privateNetwork,omitempty"`
+}
+
+type PrivateNetworkSpec struct {
+	Enabled bool `json:"enabled"`
+	// Set the ID to reuse an existing PrivateNetwork.
+	// +optional
+	ID *string `json:"id,omitempty"`
+}
+
+type LoadBalancerSpec struct {
+	// Zone where to create the loadbalancer. Must be in the same region as the
+	// cluster. Defaults to the first zone of the region.
+	// +optional
+	Zone *string `json:"zone,omitempty"`
+	// Load Balancer commercial offer type.
+	// +kubebuilder:default="LB-S"
+	// +optional
+	Type string `json:"type,omitempty"`
 }
 
 // ScalewayClusterStatus defines the observed state of ScalewayCluster
 type ScalewayClusterStatus struct {
-	Ready bool `json:"ready"`
+	// +kubebuilder:default=false
+	Ready          bool                          `json:"ready"`
+	FailureDomains clusterv1beta1.FailureDomains `json:"failureDomains,omitempty"`
 }
 
 //+kubebuilder:object:root=true

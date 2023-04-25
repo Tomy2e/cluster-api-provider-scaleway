@@ -1,5 +1,11 @@
 # cluster-api-provider-scaleway
-// TODO(user): Add simple overview of use/purpose
+
+⚠ This is currently a proof-of-concept. Do NOT use in production! ⚠
+
+As this is still an early release, the current API is NOT guaranteed to be stable.
+Things will break in the first releases, be prepared for it.
+
+Do not hesitate to contribute by opening issues/pull requests.
 
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use

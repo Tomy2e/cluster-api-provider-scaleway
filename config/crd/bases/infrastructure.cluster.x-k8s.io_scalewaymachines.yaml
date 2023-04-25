@@ -35,13 +35,44 @@ spec:
           spec:
             description: ScalewayMachineSpec defines the desired state of ScalewayMachine
             properties:
-              foo:
-                description: Foo is an example field of ScalewayMachine. Edit scalewaymachine_types.go
-                  to remove/update
+              image:
                 type: string
+              providerID:
+                type: string
+              publicIP:
+                type: boolean
+              rootVolumeSize:
+                format: int64
+                type: integer
+              type:
+                type: string
+            required:
+            - image
+            - type
             type: object
           status:
             description: ScalewayMachineStatus defines the observed state of ScalewayMachine
+            properties:
+              addresses:
+                items:
+                  description: MachineAddress contains information for the node's
+                    address.
+                  properties:
+                    address:
+                      description: The machine address.
+                      type: string
+                    type:
+                      description: Machine address type, one of Hostname, ExternalIP
+                        or InternalIP.
+                      type: string
+                  required:
+                  - address
+                  - type
+                  type: object
+                type: array
+              ready:
+                description: Ready is true when the provider resource is ready.
+                type: boolean
             type: object
         type: object
     served: true
