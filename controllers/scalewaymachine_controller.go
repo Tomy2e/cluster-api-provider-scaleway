@@ -45,6 +45,7 @@ func (r *ScalewayMachineReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	log = log.WithValues("ScalewayMachine", klog.KObj(scalewayMachine))
+	log.Info("Starting reconciling machine")
 
 	machine, err := util.GetOwnerMachine(ctx, r.Client, scalewayMachine.ObjectMeta)
 	if err != nil {
@@ -146,6 +147,8 @@ func (r *ScalewayMachineReconciler) reconcileNormal(ctx context.Context, machine
 	}
 
 	machineScope.ScalewayMachine.Status.Ready = true
+
+	log.Info("Reconciled machine successfully")
 
 	return ctrl.Result{}, nil
 }

@@ -9,11 +9,9 @@ import (
 	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpc"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpcgw"
-	"github.com/scaleway/scaleway-sdk-go/scw"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -108,37 +106,15 @@ func (r *ScalewayClusterReconciler) reconcileNormal(ctx context.Context, cluster
 		}
 	}
 
-	zones := clusterScope.Region().GetZones()
-
-	if len(zones) == 0 {
-		zones = append(zones, scw.Zone(fmt.Sprintf("%s-1", clusterScope.Region())))
-	}
-
-	failureDomains := make(v1beta1.FailureDomains, len(zones))
-	for _, zone := range zones {
-		if len(clusterScope.ScalewayCluster.Spec.FailureDomains) > 0 {
-			for _, fd := range clusterScope.ScalewayCluster.Spec.FailureDomains {
-				if fd == zone.String() {
-					failureDomains[zone.String()] = v1beta1.FailureDomainSpec{
-						ControlPlane: true,
-					}
-				}
-			}
-		} else {
-			failureDomains[zone.String()] = v1beta1.FailureDomainSpec{
-				ControlPlane: true,
-			}
-		}
-	}
-
-	clusterScope.ScalewayCluster.Status.FailureDomains = failureDomains
+	clusterScope.ScalewayCluster.Status.FailureDomains = clusterScope.FailureDomains()
 
 	if err := vpc.NewService(clusterScope).Reconcile(ctx); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile vpc: %w", err)
 	}
 
+	// TODO: maybe wait for the gateway to be ready?
 	if err := vpcgw.NewService(clusterScope).Reconcile(ctx); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile vpcgw: %w", err)
 	}
 
 	if err := loadbalancer.NewService(clusterScope).Reconcile(ctx); err != nil {
@@ -146,7 +122,7 @@ func (r *ScalewayClusterReconciler) reconcileNormal(ctx context.Context, cluster
 			log.Info("loadbalancer is not ready yet, retrying")
 			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile loadbalancer: %w", err)
 	}
 
 	clusterScope.ScalewayCluster.Status.Ready = true
@@ -157,7 +133,7 @@ func (r *ScalewayClusterReconciler) reconcileNormal(ctx context.Context, cluster
 func (r *ScalewayClusterReconciler) reconcileDelete(ctx context.Context, clusterScope *scope.Cluster) (ctrl.Result, error) {
 	log := k8slog.FromContext(ctx)
 
-	log.Info("deleting ScalewayCluster")
+	log.Info("Deleting cluster")
 
 	if err := loadbalancer.NewService(clusterScope).Delete(ctx); err != nil {
 		return ctrl.Result{}, err

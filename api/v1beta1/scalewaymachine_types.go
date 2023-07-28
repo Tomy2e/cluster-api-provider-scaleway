@@ -18,6 +18,7 @@ type ScalewayMachineSpec struct {
 	RootVolumeSize *int64  `json:"rootVolumeSize,omitempty"`
 	// +optional
 	PublicIP *bool `json:"publicIP,omitempty"`
+	// VolumeType ?
 }
 
 // ScalewayMachineStatus defines the observed state of ScalewayMachine

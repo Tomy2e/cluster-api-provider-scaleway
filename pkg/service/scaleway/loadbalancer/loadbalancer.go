@@ -57,7 +57,7 @@ func (s *Service) ensurePrivateNetwork(ctx context.Context, loadbalancer *lb.LB)
 		return nil
 	}
 
-	pnID, err := s.PrivateNetworkID(ctx, s.LoadBalancerZone())
+	pnID, err := s.PrivateNetworkID()
 	if err != nil {
 		return err
 	}

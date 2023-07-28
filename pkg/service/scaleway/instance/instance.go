@@ -9,8 +9,10 @@ import (
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/loadbalancer"
+	"github.com/google/uuid"
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	"github.com/scaleway/scaleway-sdk-go/api/lb/v1"
+	"github.com/scaleway/scaleway-sdk-go/api/marketplace/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
@@ -25,6 +27,11 @@ type Service struct {
 
 func NewService(machineScope *scope.Machine) *Service {
 	return &Service{machineScope}
+}
+
+func isValidUUID(u string) bool {
+	_, err := uuid.Parse(u)
+	return err == nil
 }
 
 // getOrCreateIP gets or creates a public IP for the instance. If no IP is needed
@@ -66,25 +73,16 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 			rootSize = scw.Size(*s.ScalewayMachine.Spec.RootVolumeSize) * scw.GB
 		}
 
-		serverType, err := s.ScalewayClient.Instance.GetServerType(&instance.GetServerTypeRequest{
-			Zone: s.Zone(),
-			Name: s.ScalewayMachine.Spec.Type,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("could not find server type %q: %w", s.ScalewayMachine.Spec.Type, err)
-		}
-
-		images, err := s.ScalewayClient.Instance.ListImages(&instance.ListImagesRequest{
-			Zone: s.Zone(),
-			Arch: scw.StringPtr(serverType.Arch.String()),
-			Name: scw.StringPtr(s.ScalewayMachine.Spec.Image),
-		}, scw.WithContext(ctx))
-		if err != nil {
-			return nil, fmt.Errorf("could not find images: %w", err)
-		}
-
-		if len(images.Images) == 0 {
-			return nil, fmt.Errorf("did not find any image associated to %q", s.ScalewayMachine.Spec.Image)
+		imageID := s.ScalewayMachine.Spec.Image
+		if !isValidUUID(imageID) {
+			imageID, err = s.ScalewayClient.Marketplace.GetLocalImageIDByLabel(&marketplace.GetLocalImageIDByLabelRequest{
+				CommercialType: s.ScalewayMachine.Spec.Type,
+				Zone:           s.Zone(),
+				ImageLabel:     s.ScalewayMachine.Spec.Image,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to find image with label %q: %w", s.ScalewayMachine.Spec.Image, err)
+			}
 		}
 
 		bootType := instance.BootTypeLocal
@@ -94,14 +92,15 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 			BootType:          &bootType,
 			CommercialType:    s.ScalewayMachine.Spec.Type,
 			DynamicIPRequired: scw.BoolPtr(false),
+			RoutedIPEnabled:   scw.BoolPtr(false), // TODO: ip mobility
 			EnableIPv6:        true,
-			Image:             images.Images[0].ID,
+			Image:             imageID,
 			Volumes: map[string]*instance.VolumeServerTemplate{
 				"0": {
 					//Name:       "CAPS System Volume",
-					Size:       rootSize,
+					Size:       scw.SizePtr(rootSize),
 					VolumeType: instance.VolumeVolumeTypeBSSD,
-					Boot:       true,
+					Boot:       scw.BoolPtr(true),
 				},
 			},
 		}
@@ -126,7 +125,7 @@ func (s *Service) getOrCreatePrivateNIC(ctx context.Context, server *instance.Se
 		return nil, nil
 	}
 
-	pnID, err := s.PrivateNetworkID(ctx, s.LoadBalancerZone())
+	pnID, err := s.PrivateNetworkID()
 	if err != nil {
 		return nil, err
 	}
@@ -152,35 +151,55 @@ func (s *Service) getOrCreatePrivateNIC(ctx context.Context, server *instance.Se
 	return pnic, nil
 }
 
-func (s *Service) getMachineIP(ctx context.Context, server *instance.Server, pnic *instance.PrivateNIC) (string, error) {
-	// TODO: PublicIP could be nil...
-	ip := server.PublicIP.Address.String()
+type machineIPs struct {
+	Internal *string
+	External *string
+}
+
+func (m *machineIPs) IP() string {
+	if m.Internal != nil {
+		return *m.Internal
+	}
+
+	// Panics if machineIPs has no IP (should never happen).
+	return *m.External
+}
+
+func (s *Service) getMachineIPs(ctx context.Context, server *instance.Server, pnic *instance.PrivateNIC) (*machineIPs, error) {
+	m := &machineIPs{}
 
 	if pnic != nil {
 		privateIP, err := s.ScalewayClient.FindIPv4ByInstancePrivateNICID(ctx, s.Cluster.Region(), pnic.ID)
 		if err != nil {
 			if errors.Is(err, client.ErrNoItemFound) {
-				return "", ErrPrivateIPNotFound
+				return nil, ErrPrivateIPNotFound
 			}
 
-			return "", err
+			return nil, err
 		}
 
-		ip = privateIP.IP.String()
+		m.Internal = scw.StringPtr(privateIP.IP.String())
 	}
 
-	return ip, nil
+	if server.PublicIP != nil {
+		m.External = scw.StringPtr(server.PublicIP.Address.String())
+	}
+
+	if m.External == nil && m.Internal == nil {
+		return nil, errors.New("machine has no IP")
+	}
+
+	return m, nil
 }
 
-func patchBootstrapData(data []byte, machineIP *string) []byte {
-	if machineIP == nil {
+func patchBootstrapData(data []byte, machineIPs *machineIPs) []byte {
+	if machineIPs == nil {
 		return data
 	}
-
-	return bytes.ReplaceAll(data, []byte("{{ MachineIP }}"), []byte(*machineIP))
+	return bytes.ReplaceAll(data, []byte("{{ MachineIP }}"), []byte(machineIPs.IP()))
 }
 
-func (s *Service) ensureCloudInit(ctx context.Context, server *instance.Server, machineIP *string) error {
+func (s *Service) ensureCloudInit(ctx context.Context, server *instance.Server, machineIPs *machineIPs) error {
 	if server.State != instance.ServerStateStopped {
 		return nil
 	}
@@ -199,7 +218,7 @@ func (s *Service) ensureCloudInit(ctx context.Context, server *instance.Server, 
 			return err
 		}
 
-		bootstrapData = patchBootstrapData(bootstrapData, machineIP)
+		bootstrapData = patchBootstrapData(bootstrapData, machineIPs)
 
 		if err := s.ScalewayClient.Instance.SetServerUserData(&instance.SetServerUserDataRequest{
 			Zone:     server.Zone,
@@ -230,7 +249,7 @@ func (s *Service) ensureServerStarted(ctx context.Context, server *instance.Serv
 	return nil
 }
 
-func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *instance.Server, pnic *instance.PrivateNIC, deletion bool) (*string, error) {
+func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *instance.Server, pnic *instance.PrivateNIC, deletion bool) (*machineIPs, error) {
 	if !util.IsControlPlaneMachine(s.Machine.Machine) {
 		return nil, nil
 	}
@@ -245,33 +264,33 @@ func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *in
 		return nil, err
 	}
 
-	ip, err := s.getMachineIP(ctx, server, pnic)
+	ips, err := s.getMachineIPs(ctx, server, pnic)
 	if err != nil {
 		return nil, err
 	}
 
 	switch {
-	case deletion && slices.Contains(backend.Pool, ip):
-		if slices.Contains(backend.Pool, ip) {
+	case deletion && slices.Contains(backend.Pool, ips.IP()):
+		if slices.Contains(backend.Pool, ips.IP()) {
 			if _, err := s.ScalewayClient.LoadBalancer.RemoveBackendServers(&lb.ZonedAPIRemoveBackendServersRequest{
 				Zone:      s.Cluster.LoadBalancerZone(),
 				BackendID: backend.ID,
-				ServerIP:  []string{ip},
+				ServerIP:  []string{ips.IP()},
 			}); err != nil {
 				return nil, err
 			}
 		}
-	case !deletion && !slices.Contains(backend.Pool, ip):
+	case !deletion && !slices.Contains(backend.Pool, ips.IP()):
 		if _, err := s.ScalewayClient.LoadBalancer.AddBackendServers(&lb.ZonedAPIAddBackendServersRequest{
 			Zone:      s.Cluster.LoadBalancerZone(),
 			BackendID: backend.ID,
-			ServerIP:  []string{ip},
+			ServerIP:  []string{ips.IP()},
 		}); err != nil {
 			return nil, err
 		}
 	}
 
-	return &ip, nil
+	return ips, nil
 }
 
 func (s *Service) Reconcile(ctx context.Context) error {
@@ -290,12 +309,12 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return err
 	}
 
-	machineIP, err := s.ensureControlPlaneLoadBalancer(ctx, server, pnic, false)
+	machineIPs, err := s.ensureControlPlaneLoadBalancer(ctx, server, pnic, false)
 	if err != nil {
 		return err
 	}
 
-	if err := s.ensureCloudInit(ctx, server, machineIP); err != nil {
+	if err := s.ensureCloudInit(ctx, server, machineIPs); err != nil {
 		return err
 	}
 
@@ -304,11 +323,24 @@ func (s *Service) Reconcile(ctx context.Context) error {
 	}
 
 	s.ScalewayMachine.Spec.ProviderID = scw.StringPtr(s.ProviderID(server.ID))
-	s.ScalewayMachine.Status.Addresses = []v1beta1.MachineAddress{
-		{
-			Type:    v1beta1.MachineExternalIP,
-			Address: server.PublicIP.Address.String(),
-		},
+
+	s.ScalewayMachine.Status.Addresses = []v1beta1.MachineAddress{}
+
+	// TODO: make sure it's never nil.
+	if machineIPs != nil {
+		if machineIPs.External != nil {
+			s.ScalewayMachine.Status.Addresses = append(s.ScalewayMachine.Status.Addresses, v1beta1.MachineAddress{
+				Type:    v1beta1.MachineExternalIP,
+				Address: *machineIPs.External,
+			})
+		}
+
+		if machineIPs.Internal != nil {
+			s.ScalewayMachine.Status.Addresses = append(s.ScalewayMachine.Status.Addresses, v1beta1.MachineAddress{
+				Type:    v1beta1.MachineInternalIP,
+				Address: *machineIPs.Internal,
+			})
+		}
 	}
 
 	return nil
@@ -329,7 +361,7 @@ func (s *Service) Delete(ctx context.Context) error {
 		var pnic *instance.PrivateNIC
 
 		if s.HasPrivateNetwork() {
-			pnID, err := s.PrivateNetworkID(ctx, server.Zone)
+			pnID, err := s.PrivateNetworkID()
 			if err != nil {
 				return err
 			}

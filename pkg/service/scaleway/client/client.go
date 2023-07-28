@@ -6,7 +6,8 @@ import (
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	ipam "github.com/scaleway/scaleway-sdk-go/api/ipam/v1alpha1"
 	"github.com/scaleway/scaleway-sdk-go/api/lb/v1"
-	"github.com/scaleway/scaleway-sdk-go/api/vpc/v1"
+	"github.com/scaleway/scaleway-sdk-go/api/marketplace/v1"
+	"github.com/scaleway/scaleway-sdk-go/api/vpc/v2"
 	"github.com/scaleway/scaleway-sdk-go/api/vpcgw/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 )
@@ -20,7 +21,9 @@ type Client struct {
 	ProjectID     string
 	LoadBalancer  *lb.ZonedAPI
 	Instance      *instance.API
+	Marketplace   *marketplace.API
 	VPC           *vpc.API
+	VPCGW         *vpcgw.API
 	IPAM          *ipam.API
 	PublicGateway *vpcgw.API
 }
@@ -36,7 +39,9 @@ func New(client *scw.Client) *Client {
 		ProjectID:     projectID,
 		LoadBalancer:  lb.NewZonedAPI(client),
 		Instance:      instance.NewAPI(client),
+		Marketplace:   marketplace.NewAPI(client),
 		VPC:           vpc.NewAPI(client),
+		VPCGW:         vpcgw.NewAPI(client),
 		IPAM:          ipam.NewAPI(client),
 		PublicGateway: vpcgw.NewAPI(client),
 	}
