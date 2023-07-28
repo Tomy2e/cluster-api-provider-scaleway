@@ -138,8 +138,9 @@ func (c *Cluster) PublicGatewayZone() scw.Zone {
 
 // LoadBalancerType returns the type of the control-plane Load Balancer.
 func (c *Cluster) LoadBalancerType() string {
-	if c.ScalewayCluster.Spec.ControlPlaneLoadBalancer != nil {
-		return c.ScalewayCluster.Spec.ControlPlaneLoadBalancer.Type
+	if c.ScalewayCluster.Spec.ControlPlaneLoadBalancer != nil &&
+		c.ScalewayCluster.Spec.ControlPlaneLoadBalancer.Type != nil {
+		return *c.ScalewayCluster.Spec.ControlPlaneLoadBalancer.Type
 	}
 
 	return DefaultLoadBalancerType
@@ -190,5 +191,11 @@ func (c *Cluster) SetStatusPrivateNetworkID(pnID string) {
 		}
 	} else {
 		c.ScalewayCluster.Status.Network.PrivateNetworkID = &pnID
+	}
+}
+
+func (c *Cluster) Tags() []string {
+	return []string{
+		fmt.Sprintf("caps-cluster=%s", c.Name()),
 	}
 }

@@ -13,12 +13,42 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+const defaultVPCGWType = "VPC-GW-S"
+
 type Service struct {
 	ClusterScope *scope.Cluster
 }
 
 func NewService(clusterScope *scope.Cluster) *Service {
 	return &Service{clusterScope}
+}
+
+func (s *Service) getOrCreateIP(ctx context.Context, zone scw.Zone, existingIP *string) (*vpcgw.IP, error) {
+	if existingIP != nil {
+		ip, err := s.ClusterScope.ScalewayClient.FindGatewayIP(ctx, zone, *s.ClusterScope.ScalewayCluster.Spec.Network.PublicGateway.IP)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find IP %q: %w", *s.ClusterScope.ScalewayCluster.Spec.Network.PublicGateway.IP, err)
+		}
+
+		return ip, nil
+	}
+
+	ip, err := s.ClusterScope.ScalewayClient.FindGatewayIPByTags(ctx, zone, s.ClusterScope.Tags())
+	if err != nil && !errors.Is(err, client.ErrNoItemFound) {
+		return nil, err
+	}
+
+	if ip == nil {
+		ip, err = s.ClusterScope.ScalewayClient.VPCGW.CreateIP(&vpcgw.CreateIPRequest{
+			Zone: zone,
+			Tags: s.ClusterScope.Tags(),
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return ip, nil
 }
 
 func (s *Service) getOrCreateGateway(ctx context.Context, zone scw.Zone) (*vpcgw.Gateway, error) {
@@ -28,11 +58,21 @@ func (s *Service) getOrCreateGateway(ctx context.Context, zone scw.Zone) (*vpcgw
 	}
 
 	if gw == nil {
+		ip, err := s.getOrCreateIP(ctx, zone, s.ClusterScope.ScalewayCluster.Spec.Network.PublicGateway.IP)
+		if err != nil {
+			return nil, err
+		}
+
+		vpcgwType := s.ClusterScope.ScalewayCluster.Spec.Network.PublicGateway.Type
+		if vpcgwType == nil {
+			vpcgwType = scw.StringPtr(defaultVPCGWType)
+		}
+
 		gw, err = s.ClusterScope.ScalewayClient.VPCGW.CreateGateway(&vpcgw.CreateGatewayRequest{
 			Zone: zone,
 			Name: s.ClusterScope.Name(),
-			IPID: s.ClusterScope.ScalewayCluster.Spec.Network.PublicGateway.IPID,
-			Type: s.ClusterScope.ScalewayCluster.Spec.Network.PublicGateway.Type,
+			IPID: &ip.ID,
+			Type: *vpcgwType,
 		}, scw.WithContext(ctx))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Public Gateway: %w", err)
@@ -123,16 +163,35 @@ func (s *Service) Delete(ctx context.Context) error {
 	zone := s.ClusterScope.PublicGatewayZone()
 
 	gw, err := s.ClusterScope.ScalewayClient.FindGatewayByName(ctx, zone, s.ClusterScope.Name())
-	if err != nil {
-		if errors.Is(err, client.ErrNoItemFound) {
-			return nil
-		}
-
+	if err != nil && !errors.Is(err, client.ErrNoItemFound) {
 		return fmt.Errorf("failed to find PublicGateway: %w", err)
 	}
 
-	return s.ClusterScope.ScalewayClient.PublicGateway.DeleteGateway(&vpcgw.DeleteGatewayRequest{
-		Zone:      zone,
-		GatewayID: gw.ID,
-	})
+	if err == nil {
+		if err := s.ClusterScope.ScalewayClient.PublicGateway.DeleteGateway(&vpcgw.DeleteGatewayRequest{
+			Zone:      zone,
+			GatewayID: gw.ID,
+		}); err != nil {
+			return fmt.Errorf("failed to delete PublicGateway: %w", err)
+		}
+	}
+
+	// Release IP if an IP was automatically created.
+	if s.ClusterScope.ScalewayCluster.Spec.Network.PublicGateway.IP == nil {
+		ip, err := s.ClusterScope.ScalewayClient.FindGatewayIPByTags(ctx, zone, s.ClusterScope.Tags())
+		if err != nil && !errors.Is(err, client.ErrNoItemFound) {
+			return fmt.Errorf("failed to find Public Gateway IP: %w", err)
+		}
+
+		if err == nil {
+			if err := s.ClusterScope.ScalewayClient.PublicGateway.DeleteIP(&vpcgw.DeleteIPRequest{
+				Zone: zone,
+				IPID: ip.ID,
+			}); err != nil {
+				return fmt.Errorf("failed to delete Public Gateway IP: %w", err)
+			}
+		}
+	}
+
+	return nil
 }

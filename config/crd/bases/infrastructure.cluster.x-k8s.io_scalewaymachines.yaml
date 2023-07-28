@@ -36,15 +36,21 @@ spec:
             description: ScalewayMachineSpec defines the desired state of ScalewayMachine
             properties:
               image:
+                description: Label (e.g. ubuntu_jammy) or UUID of an image that will
+                  be used to create the instance.
                 type: string
               providerID:
                 type: string
               publicIP:
+                description: Set to true to create and attach a public IP to the instance.
+                  Defaults to false.
                 type: boolean
               rootVolumeSize:
+                description: Size of the root volume in GB. Default to 20 GB.
                 format: int64
                 type: integer
               type:
+                description: Type of instance (e.g. PRO2-S).
                 type: string
             required:
             - image
@@ -54,6 +60,7 @@ spec:
             description: ScalewayMachineStatus defines the observed state of ScalewayMachine
             properties:
               addresses:
+                description: Addresses of the node.
                 items:
                   description: MachineAddress contains information for the node's
                     address.

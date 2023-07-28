@@ -9,6 +9,7 @@ import (
 	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpc"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpcgw"
+	"github.com/scaleway/scaleway-sdk-go/scw"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
@@ -127,6 +128,8 @@ func (r *ScalewayClusterReconciler) reconcileNormal(ctx context.Context, cluster
 
 	clusterScope.ScalewayCluster.Status.Ready = true
 
+	log.Info("Reconciled cluster successfully")
+
 	return ctrl.Result{}, nil
 }
 
@@ -144,6 +147,11 @@ func (r *ScalewayClusterReconciler) reconcileDelete(ctx context.Context, cluster
 	}
 
 	if err := vpc.NewService(clusterScope).Delete(ctx); err != nil {
+		var pfe *scw.PreconditionFailedError
+		if errors.As(err, &pfe) {
+			log.Info("cannot delete Private Network due to precondition failure, retrying", "err", err)
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
 		return ctrl.Result{}, err
 	}
 

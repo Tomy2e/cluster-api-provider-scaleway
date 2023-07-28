@@ -3,6 +3,7 @@ package loadbalancer
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
@@ -38,11 +39,23 @@ func (s *Service) getOrCreateLB(ctx context.Context, zone scw.Zone) (*lb.LB, err
 	}
 
 	if loadbalancer == nil {
+		var ipID *string
+
+		if s.ScalewayCluster.Spec.ControlPlaneLoadBalancer != nil &&
+			s.ScalewayCluster.Spec.ControlPlaneLoadBalancer.IP != nil {
+			ip, err := s.ScalewayClient.FindLoadBalancerIP(ctx, zone, *s.ScalewayCluster.Spec.ControlPlaneLoadBalancer.IP)
+			if err != nil {
+				return nil, fmt.Errorf("failed to find IP %q: %w", *s.ScalewayCluster.Spec.ControlPlaneLoadBalancer.IP, err)
+			}
+
+			ipID = &ip.ID
+		}
+
 		loadbalancer, err = s.ScalewayClient.LoadBalancer.CreateLB(&lb.ZonedAPICreateLBRequest{
 			Zone: zone,
 			Name: s.Name(),
 			Type: s.LoadBalancerType(),
-			// TODO: allow using an existing IP.
+			IPID: ipID,
 		}, scw.WithContext(ctx))
 		if err != nil {
 			return nil, err
@@ -218,9 +231,17 @@ func (s *Service) Delete(ctx context.Context) error {
 		return err
 	}
 
-	return s.ScalewayClient.LoadBalancer.DeleteLB(&lb.ZonedAPIDeleteLBRequest{
+	// Do not release IP if an IP was provided by the user.
+	releaseIP := !(s.ScalewayCluster.Spec.ControlPlaneLoadBalancer != nil &&
+		s.ScalewayCluster.Spec.ControlPlaneLoadBalancer.IP != nil)
+
+	if err := s.ScalewayClient.LoadBalancer.DeleteLB(&lb.ZonedAPIDeleteLBRequest{
 		Zone:      loadbalancer.Zone,
 		LBID:      loadbalancer.ID,
-		ReleaseIP: true, // TODO: do not release IP if created from existing IP.
-	})
+		ReleaseIP: releaseIP,
+	}); err != nil {
+		return fmt.Errorf("failed to delete load balancer: %w", err)
+	}
+
+	return nil
 }

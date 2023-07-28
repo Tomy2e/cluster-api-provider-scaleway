@@ -36,7 +36,8 @@ spec:
             description: ScalewayClusterSpec defines the desired state of ScalewayCluster
             properties:
               controlPlaneEndpoint:
-                description: APIEndpoint represents a reachable Kubernetes API endpoint.
+                description: ControlPlaneEndpoint represents the endpoint used to
+                  communicate with the control plane.
                 properties:
                   host:
                     description: The hostname on which the API server is serving.
@@ -50,7 +51,11 @@ spec:
                 - port
                 type: object
               controlPlaneLoadBalancer:
+                description: ControlPlaneLoadBalancer contains loadbalancer options.
                 properties:
+                  ip:
+                    description: IP to use when creating a loadbalancer.
+                    type: string
                   type:
                     default: LB-S
                     description: Load Balancer commercial offer type.
@@ -62,10 +67,14 @@ spec:
                     type: string
                 type: object
               failureDomains:
+                description: FailureDomains is a list of failure domains where the
+                  control-plane nodes and resources (loadbalancer, public gateway,
+                  etc.) will be created.
                 items:
                   type: string
                 type: array
               network:
+                description: Network contains network related options for the cluster.
                 properties:
                   privateNetwork:
                     description: PrivateNetwork allows attaching machines of the cluster
@@ -95,16 +104,16 @@ spec:
                     properties:
                       enabled:
                         description: Set to true to attach a Public Gateway to the
-                          Private Network. The Public Gateway is automatically created
-                          if no existing Public Gateway ID is provided.
+                          Private Network. The Public Gateway will automatically be
+                          created if no existing Public Gateway ID is provided.
                         type: boolean
                       id:
                         description: ID of an existing Public Gateway that will be
                           attached to the Private Network. You should also specify
                           the zone field.
                         type: string
-                      ipID:
-                        description: ID of an existing IP.
+                      ip:
+                        description: IP to use when creating a Public Gateway.
                         type: string
                       type:
                         default: VPC-GW-S
@@ -120,8 +129,13 @@ spec:
                     type: object
                 type: object
               region:
+                description: Region represents the region where the cluster will be
+                  hosted.
                 type: string
               scalewaySecretName:
+                description: 'Name of the secret that contains the Scaleway client
+                  parameters. The following keys must be set: accessKey, secretKey,
+                  projectID. The following key is optional: apiURL.'
                 type: string
             required:
             - region
@@ -147,17 +161,22 @@ spec:
                         is suitable for use by control plane machines.
                       type: boolean
                   type: object
-                description: FailureDomains is a slice of FailureDomains.
+                description: List of failure domains for this cluster.
                 type: object
               network:
+                description: Network status.
                 properties:
                   privateNetworkID:
+                    description: ID of the Private Network if available.
                     type: string
                   publicGatewayID:
+                    description: ID of the Public Gateway if available.
                     type: string
                 type: object
               ready:
                 default: false
+                description: Ready is true when all cloud resources are created and
+                  ready.
                 type: boolean
             required:
             - ready

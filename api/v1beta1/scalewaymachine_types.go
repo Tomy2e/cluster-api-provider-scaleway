@@ -12,13 +12,23 @@ type ScalewayMachineSpec struct {
 	// TODO: enforce immutable field(s)
 
 	// +optional
-	ProviderID     *string `json:"providerID,omitempty"`
-	Image          string  `json:"image"`
-	Type           string  `json:"type"`
-	RootVolumeSize *int64  `json:"rootVolumeSize,omitempty"`
+	ProviderID *string `json:"providerID,omitempty"`
+
+	// Label (e.g. ubuntu_jammy) or UUID of an image that will be used to
+	// create the instance.
+	Image string `json:"image"`
+
+	// Type of instance (e.g. PRO2-S).
+	Type string `json:"type"`
+
+	// Size of the root volume in GB. Defaults to 20 GB.
+	// +optional
+	RootVolumeSize *int64 `json:"rootVolumeSize,omitempty"`
+
+	// Set to true to create and attach a public IP to the instance.
+	// Defaults to false.
 	// +optional
 	PublicIP *bool `json:"publicIP,omitempty"`
-	// VolumeType ?
 }
 
 // ScalewayMachineStatus defines the observed state of ScalewayMachine
@@ -27,6 +37,7 @@ type ScalewayMachineStatus struct {
 	// +optional
 	Ready bool `json:"ready"`
 
+	// Addresses of the node.
 	Addresses []clusterv1.MachineAddress `json:"addresses,omitempty"`
 }
 

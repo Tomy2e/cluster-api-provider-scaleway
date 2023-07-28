@@ -9,24 +9,34 @@ const ClusterFinalizer = "scalewaycluster.infrastructure.cluster.x-k8s.io"
 
 // ScalewayClusterSpec defines the desired state of ScalewayCluster
 type ScalewayClusterSpec struct {
+	// ControlPlaneEndpoint represents the endpoint used to communicate with the control plane.
 	// +optional
 	ControlPlaneEndpoint clusterv1beta1.APIEndpoint `json:"controlPlaneEndpoint"`
 
 	// TODO: enforce immutable field(s)
 
+	// FailureDomains is a list of failure domains where the control-plane nodes
+	// and resources (loadbalancer, public gateway, etc.) will be created.
 	FailureDomains []string `json:"failureDomains,omitempty"`
 
+	// Region represents the region where the cluster will be hosted.
 	Region string `json:"region"`
 
+	// Network contains network related options for the cluster.
 	// +optional
 	Network NetworkSpec `json:"network"`
 
+	// ControlPlaneLoadBalancer contains loadbalancer options.
 	// +optional
 	ControlPlaneLoadBalancer *LoadBalancerSpec `json:"controlPlaneLoadBalancer"`
 
+	// Name of the secret that contains the Scaleway client parameters.
+	// The following keys must be set: accessKey, secretKey, projectID.
+	// The following key is optional: apiURL.
 	ScalewaySecretName string `json:"scalewaySecretName"`
 }
 
+// NetworkSpec defines network specific settings.
 type NetworkSpec struct {
 	// PrivateNetwork allows attaching machines of the cluster to a Private
 	// Network.
@@ -40,65 +50,88 @@ type NetworkSpec struct {
 	PublicGateway *PublicGatewaySpec `json:"publicGateway,omitempty"`
 }
 
+// PrivateNetworkSpec defines Private Network settings for the cluster.
 type PrivateNetworkSpec struct {
 	// Set to true to automatically attach machines to a Private Network.
 	// The Private Network is automatically created if no existing Private
 	// Network ID is provided.
 	Enabled bool `json:"enabled"`
+
 	// Set a Private Network ID to reuse an existing Private Network. This
 	// Private Network must have DHCP enabled.
 	// +optional
 	ID *string `json:"id,omitempty"`
+
 	// Optional subnet for the Private Network. Only used on newly created
 	// Private Networks.
 	// +optional
 	Subnet *string `json:"subnet,omitempty"`
 }
 
+// PublicGatewaySpec defines Public Gateway settings for the cluster.
 type PublicGatewaySpec struct {
 	// Set to true to attach a Public Gateway to the Private Network.
-	// The Public Gateway is automatically created if no existing Public Gateway
-	// ID is provided.
+	// The Public Gateway will automatically be created if no existing Public
+	// Gateway ID is provided.
 	Enabled bool `json:"enabled"`
+
 	// ID of an existing Public Gateway that will be attached to the Private
 	// Network. You should also specify the zone field.
 	ID *string `json:"id,omitempty"`
+
 	// Public Gateway commercial offer type.
 	// +kubebuilder:default="VPC-GW-S"
 	// +optional
-	Type string `json:"type,omitempty"`
-	// ID of an existing IP.
-	IPID *string `json:"ipID,omitempty"`
+	Type *string `json:"type,omitempty"`
+
+	// IP to use when creating a Public Gateway.
+	IP *string `json:"ip,omitempty"`
+
 	// Zone where to create the Public Gateway. Must be in the same region as the
 	// cluster. Defaults to the first zone of the region.
 	// +optional
 	Zone *string `json:"zone,omitempty"`
 }
 
+// LoadBalancerSpec defines control-plane loadbalancer settings for the cluster.
 type LoadBalancerSpec struct {
 	// Zone where to create the loadbalancer. Must be in the same region as the
 	// cluster. Defaults to the first zone of the region.
 	// +optional
 	Zone *string `json:"zone,omitempty"`
+
 	// Load Balancer commercial offer type.
 	// +kubebuilder:default="LB-S"
 	// +optional
-	Type string `json:"type,omitempty"`
+	Type *string `json:"type,omitempty"`
+
+	// IP to use when creating a loadbalancer.
+	IP *string `json:"ip,omitempty"`
 }
 
 // ScalewayClusterStatus defines the observed state of ScalewayCluster
 type ScalewayClusterStatus struct {
+	// Ready is true when all cloud resources are created and ready.
 	// +kubebuilder:default=false
-	Ready          bool                          `json:"ready"`
+	Ready bool `json:"ready"`
+
+	// List of failure domains for this cluster.
 	FailureDomains clusterv1beta1.FailureDomains `json:"failureDomains,omitempty"`
 
+	// Network status.
 	// +optional
 	Network *NetworkStatus `json:"network,omitempty"`
 }
 
+// NetworkStatus contains network status related data.
 type NetworkStatus struct {
+	// ID of the Private Network if available.
+	// +optional
 	PrivateNetworkID *string `json:"privateNetworkID,omitempty"`
-	PublicGatewayID  *string `json:"publicGatewayID,omitempty"`
+
+	// ID of the Public Gateway if available.
+	// +optional
+	PublicGatewayID *string `json:"publicGatewayID,omitempty"`
 }
 
 //+kubebuilder:object:root=true
