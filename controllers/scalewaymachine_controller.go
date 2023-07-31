@@ -154,7 +154,14 @@ func (r *ScalewayMachineReconciler) reconcileNormal(ctx context.Context, machine
 }
 
 func (r *ScalewayMachineReconciler) reconcileDelete(ctx context.Context, machineScope *scope.Machine) (ctrl.Result, error) {
+	log := k8slog.FromContext(ctx)
+
 	if err := instance.NewService(machineScope).Delete(ctx); err != nil {
+		if errors.Is(err, instance.ErrInstanceNotStoppedYet) {
+			log.Info("Waiting for instance to stop")
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
+
 		return ctrl.Result{}, err
 	}
 

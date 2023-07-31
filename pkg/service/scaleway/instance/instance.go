@@ -19,7 +19,10 @@ import (
 	"sigs.k8s.io/cluster-api/util"
 )
 
-var ErrPrivateIPNotFound = errors.New("private IP not found in IPAM")
+var (
+	ErrPrivateIPNotFound     = errors.New("private IP not found in IPAM")
+	ErrInstanceNotStoppedYet = errors.New("instance is being stopped")
+)
 
 type Service struct {
 	*scope.Machine
@@ -387,13 +390,45 @@ func (s *Service) Delete(ctx context.Context) error {
 		}
 	}
 
-	// TODO: do not use terminate? We could accidentally remove CSI volumes...
-	if _, err := s.ScalewayClient.Instance.ServerAction(&instance.ServerActionRequest{
+	switch server.State {
+	case instance.ServerStateRunning, instance.ServerStateStoppedInPlace:
+		if _, err := s.ScalewayClient.Instance.ServerAction(&instance.ServerActionRequest{
+			Zone:     server.Zone,
+			ServerID: server.ID,
+			Action:   instance.ServerActionPoweroff,
+		}); err != nil {
+			return fmt.Errorf("failed to poweroff server: %w", err)
+		}
+
+		return ErrInstanceNotStoppedYet
+	case instance.ServerStateStopping:
+		return ErrInstanceNotStoppedYet
+	case instance.ServerStateLocked:
+		return errors.New("instance is locked")
+	}
+
+	// Remove boot volume.
+	if v, ok := server.Volumes["0"]; ok && v.Boot {
+		if _, err := s.ScalewayClient.Instance.DetachVolume(&instance.DetachVolumeRequest{
+			Zone:     server.Zone,
+			VolumeID: v.ID,
+		}); err != nil {
+			return fmt.Errorf("failed to detach boot volume: %w", err)
+		}
+
+		if err := s.ScalewayClient.Instance.DeleteVolume(&instance.DeleteVolumeRequest{
+			Zone:     server.Zone,
+			VolumeID: v.ID,
+		}); err != nil {
+			return fmt.Errorf("failed to delete instance volume: %w", err)
+		}
+	}
+
+	if err := s.ScalewayClient.Instance.DeleteServer(&instance.DeleteServerRequest{
 		Zone:     server.Zone,
 		ServerID: server.ID,
-		Action:   instance.ServerActionTerminate,
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to delete instance: %w", err)
 	}
 
 	return nil
