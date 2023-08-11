@@ -4,8 +4,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ScalewayClusterTemplateSpec defines the desired state of ScalewayClusterTemplate
 type ScalewayClusterTemplateSpec struct {
 	Template ScalewayClusterTemplateResource `json:"template"`
+}
+
+type ScalewayClusterTemplateResource struct {
+	// Standard object's metadata.
+	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// +optional
+	ObjectMeta metav1.ObjectMeta   `json:"metadata,omitempty"`
+	Spec       ScalewayClusterSpec `json:"spec"`
 }
 
 //+kubebuilder:object:root=true
@@ -18,14 +27,6 @@ type ScalewayClusterTemplate struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec ScalewayClusterTemplateSpec `json:"spec,omitempty"`
-}
-
-type ScalewayClusterTemplateResource struct {
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
-	// +optional
-	ObjectMeta metav1.ObjectMeta   `json:"metadata,omitempty"`
-	Spec       ScalewayClusterSpec `json:"spec"`
 }
 
 //+kubebuilder:object:root=true

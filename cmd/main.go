@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	infrastructurev1beta1 "github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/controllers"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -74,14 +74,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.ScalewayClusterReconciler{
+	if err = (&controller.ScalewayClusterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ScalewayCluster")
 		os.Exit(1)
 	}
-	if err = (&controllers.ScalewayMachineReconciler{
+	if err = (&controller.ScalewayMachineReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {

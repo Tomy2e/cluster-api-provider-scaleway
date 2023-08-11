@@ -9,6 +9,14 @@ type ScalewayMachineTemplateSpec struct {
 	Template ScalewayMachineTemplateResource `json:"template"`
 }
 
+type ScalewayMachineTemplateResource struct {
+	// Standard object's metadata.
+	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// +optional
+	ObjectMeta metav1.ObjectMeta   `json:"metadata,omitempty"`
+	Spec       ScalewayMachineSpec `json:"spec"`
+}
+
 //+kubebuilder:object:root=true
 //+kubebuilder:resource:path=scalewaymachinetemplates,scope=Namespaced,categories=cluster-api,shortName=smt
 //+kubebuilder:storageversion
@@ -19,14 +27,6 @@ type ScalewayMachineTemplate struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec ScalewayMachineTemplateSpec `json:"spec,omitempty"`
-}
-
-type ScalewayMachineTemplateResource struct {
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
-	// +optional
-	ObjectMeta metav1.ObjectMeta   `json:"metadata,omitempty"`
-	Spec       ScalewayMachineSpec `json:"spec"`
 }
 
 //+kubebuilder:object:root=true

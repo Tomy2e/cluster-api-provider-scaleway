@@ -1,4 +1,4 @@
-package controllers
+package controller
 
 import (
 	"context"
@@ -6,10 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpc"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpcgw"
-	"github.com/scaleway/scaleway-sdk-go/scw"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
@@ -17,13 +13,16 @@ import (
 	"sigs.k8s.io/cluster-api/util/annotations"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	k8slog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	infrastructurev1beta1 "github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
+	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/loadbalancer"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpc"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpcgw"
+	"github.com/scaleway/scaleway-sdk-go/scw"
 )
 
 // ScalewayClusterReconciler reconciles a ScalewayCluster object
@@ -37,8 +36,8 @@ type ScalewayClusterReconciler struct {
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=scalewayclusters/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=scalewayclusters/finalizers,verbs=update
 
-func (r *ScalewayClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
-	log := k8slog.FromContext(ctx)
+func (r *ScalewayClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, retErr error) {
+	l := log.FromContext(ctx)
 
 	scalewayCluster := &infrastructurev1beta1.ScalewayCluster{}
 	if err := r.Get(ctx, req.NamespacedName, scalewayCluster); err != nil {
@@ -47,8 +46,8 @@ func (r *ScalewayClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	log.WithValues("ScalewayCluster", klog.KObj(scalewayCluster))
-	log.Info("Starting reconciling cluster")
+	l.WithValues("ScalewayCluster", klog.KObj(scalewayCluster))
+	l.Info("Starting reconciling cluster")
 
 	cluster, err := util.GetOwnerCluster(ctx, r.Client, scalewayCluster.ObjectMeta)
 	if err != nil {
@@ -56,19 +55,19 @@ func (r *ScalewayClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if cluster == nil {
-		log.Info("Cluster Controller has not yet set OwnerRef")
+		l.Info("Cluster Controller has not yet set OwnerRef")
 		return ctrl.Result{
 			RequeueAfter: 2 * time.Second,
 		}, nil
 	}
 
 	if annotations.IsPaused(cluster, scalewayCluster) {
-		log.Info("ScalewayCluster or linked Cluster is marked as paused. Won't reconcile")
+		l.Info("ScalewayCluster or linked Cluster is marked as paused. Won't reconcile")
 		return ctrl.Result{}, nil
 	}
 
-	log = log.WithValues("Cluster", klog.KObj(cluster))
-	ctx = k8slog.IntoContext(ctx, log)
+	l = l.WithValues("Cluster", klog.KObj(cluster))
+	ctx = log.IntoContext(ctx, l)
 
 	c, err := clientFromSecret(ctx, r.Client, scalewayCluster)
 	if err != nil {
@@ -86,8 +85,8 @@ func (r *ScalewayClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	defer func() {
-		if err := clusterScope.Close(ctx); err != nil && reterr == nil {
-			reterr = err
+		if err := clusterScope.Close(ctx); err != nil && retErr == nil {
+			retErr = err
 		}
 	}()
 
@@ -99,7 +98,7 @@ func (r *ScalewayClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 func (r *ScalewayClusterReconciler) reconcileNormal(ctx context.Context, clusterScope *scope.Cluster) (ctrl.Result, error) {
-	log := k8slog.FromContext(ctx)
+	l := log.FromContext(ctx)
 
 	if controllerutil.AddFinalizer(clusterScope.ScalewayCluster, infrastructurev1beta1.ClusterFinalizer) {
 		if err := clusterScope.PatchObject(ctx); err != nil {
@@ -120,7 +119,7 @@ func (r *ScalewayClusterReconciler) reconcileNormal(ctx context.Context, cluster
 
 	if err := loadbalancer.NewService(clusterScope).Reconcile(ctx); err != nil {
 		if errors.Is(err, loadbalancer.ErrLoadBalancerNotReady) {
-			log.Info("loadbalancer is not ready yet, retrying")
+			l.Info("loadbalancer is not ready yet, retrying")
 			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile loadbalancer: %w", err)
@@ -128,15 +127,15 @@ func (r *ScalewayClusterReconciler) reconcileNormal(ctx context.Context, cluster
 
 	clusterScope.ScalewayCluster.Status.Ready = true
 
-	log.Info("Reconciled cluster successfully")
+	l.Info("Reconciled cluster successfully")
 
 	return ctrl.Result{}, nil
 }
 
 func (r *ScalewayClusterReconciler) reconcileDelete(ctx context.Context, clusterScope *scope.Cluster) (ctrl.Result, error) {
-	log := k8slog.FromContext(ctx)
+	l := log.FromContext(ctx)
 
-	log.Info("Deleting cluster")
+	l.Info("Deleting cluster")
 
 	if err := loadbalancer.NewService(clusterScope).Delete(ctx); err != nil {
 		return ctrl.Result{}, err
@@ -149,7 +148,7 @@ func (r *ScalewayClusterReconciler) reconcileDelete(ctx context.Context, cluster
 	if err := vpc.NewService(clusterScope).Delete(ctx); err != nil {
 		var pfe *scw.PreconditionFailedError
 		if errors.As(err, &pfe) {
-			log.Info("cannot delete Private Network due to precondition failure, retrying", "err", err)
+			l.Info("cannot delete Private Network due to precondition failure, retrying", "err", err)
 			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
