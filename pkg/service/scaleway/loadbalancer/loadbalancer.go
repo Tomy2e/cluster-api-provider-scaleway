@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
@@ -210,13 +211,24 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return err
 	}
 
-	// TODO: verify that loadbalancer.IP[0] is an IPv4.
-	if len(loadbalancer.IP) == 0 {
-		return errors.New("loadbalancer has no IPs")
+	var found bool
+	for _, lbIP := range loadbalancer.IP {
+		ip, err := netip.ParseAddr(lbIP.IPAddress)
+		if err != nil {
+			return fmt.Errorf("failed to parse loadbalancer IP %q: %w", lbIP.IPAddress, err)
+		}
+
+		if ip.Is4() {
+			s.ScalewayCluster.Spec.ControlPlaneEndpoint.Host = lbIP.IPAddress
+			s.ScalewayCluster.Spec.ControlPlaneEndpoint.Port = frontend.InboundPort
+			found = true
+			break
+		}
 	}
 
-	s.ScalewayCluster.Spec.ControlPlaneEndpoint.Host = loadbalancer.IP[0].IPAddress
-	s.ScalewayCluster.Spec.ControlPlaneEndpoint.Port = frontend.InboundPort
+	if !found {
+		return errors.New("loadbalancer has no IPs")
+	}
 
 	return nil
 }
