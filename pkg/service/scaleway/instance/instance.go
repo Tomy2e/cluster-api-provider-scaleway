@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"text/template"
 
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
@@ -51,6 +52,7 @@ func (s *Service) getOrCreateIP(ctx context.Context) (*instance.IP, error) {
 
 	if ip == nil {
 		ipResp, err := s.ScalewayClient.Instance.CreateIP(&instance.CreateIPRequest{
+			Type: instance.IPTypeRoutedIPv4,
 			Zone: s.Zone(),
 			Tags: s.Tags(),
 		})
@@ -88,19 +90,15 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 			}
 		}
 
-		bootType := instance.BootTypeLocal
 		req := &instance.CreateServerRequest{
 			Zone:              s.Zone(),
 			Name:              s.Name(),
-			BootType:          &bootType,
 			CommercialType:    s.ScalewayMachine.Spec.Type,
 			DynamicIPRequired: scw.BoolPtr(false),
-			RoutedIPEnabled:   scw.BoolPtr(false), // TODO: ip mobility
-			EnableIPv6:        true,
+			RoutedIPEnabled:   scw.BoolPtr(true),
 			Image:             imageID,
 			Volumes: map[string]*instance.VolumeServerTemplate{
 				"0": {
-					//Name:       "CAPS System Volume",
 					Size:       scw.SizePtr(rootSize),
 					VolumeType: instance.VolumeVolumeTypeBSSD,
 					Boot:       scw.BoolPtr(true),
@@ -159,7 +157,10 @@ type machineIPs struct {
 	External *string
 }
 
-func (m *machineIPs) IP() string {
+// NodeIP returns the main IP of the node. This IP will be used for communications
+// between the LoadBalancer and the control-plane nodes. It can also be used as an
+// IP to advertise in the cluster.
+func (m *machineIPs) NodeIP() string {
 	if m.Internal != nil {
 		return *m.Internal
 	}
@@ -195,11 +196,23 @@ func (s *Service) getMachineIPs(ctx context.Context, server *instance.Server, pn
 	return m, nil
 }
 
-func patchBootstrapData(data []byte, machineIPs *machineIPs) []byte {
-	if machineIPs == nil {
-		return data
+type bootstrapValues struct {
+	NodeIP     string
+	ProviderID string
+}
+
+func patchBootstrapData(data []byte, values *bootstrapValues) ([]byte, error) {
+	tmpl, err := template.New("bootstrap").Delims("[[[", "]]]").Parse(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse bootstrap data template: %w", err)
 	}
-	return bytes.ReplaceAll(data, []byte("{{ MachineIP }}"), []byte(machineIPs.IP()))
+	render := bytes.Buffer{}
+
+	if err := tmpl.Execute(&render, values); err != nil {
+		return nil, fmt.Errorf("failed to execute bootstrap data template: %w", err)
+	}
+
+	return render.Bytes(), nil
 }
 
 func (s *Service) ensureCloudInit(ctx context.Context, server *instance.Server, machineIPs *machineIPs) error {
@@ -221,7 +234,13 @@ func (s *Service) ensureCloudInit(ctx context.Context, server *instance.Server, 
 			return err
 		}
 
-		bootstrapData = patchBootstrapData(bootstrapData, machineIPs)
+		bootstrapData, err = patchBootstrapData(bootstrapData, &bootstrapValues{
+			NodeIP:     machineIPs.NodeIP(),
+			ProviderID: s.ProviderID(server.ID),
+		})
+		if err != nil {
+			return err
+		}
 
 		if err := s.ScalewayClient.Instance.SetServerUserData(&instance.SetServerUserDataRequest{
 			Zone:     server.Zone,
@@ -264,7 +283,7 @@ func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *in
 		loadbalancer.ControlPlaneBackendName,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find load balancer backend: %w", err)
 	}
 
 	ips, err := s.getMachineIPs(ctx, server, pnic)
@@ -273,21 +292,21 @@ func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *in
 	}
 
 	switch {
-	case deletion && slices.Contains(backend.Pool, ips.IP()):
-		if slices.Contains(backend.Pool, ips.IP()) {
+	case deletion && slices.Contains(backend.Pool, ips.NodeIP()):
+		if slices.Contains(backend.Pool, ips.NodeIP()) {
 			if _, err := s.ScalewayClient.LoadBalancer.RemoveBackendServers(&lb.ZonedAPIRemoveBackendServersRequest{
 				Zone:      s.Cluster.LoadBalancerZone(),
 				BackendID: backend.ID,
-				ServerIP:  []string{ips.IP()},
+				ServerIP:  []string{ips.NodeIP()},
 			}); err != nil {
 				return nil, err
 			}
 		}
-	case !deletion && !slices.Contains(backend.Pool, ips.IP()):
+	case !deletion && !slices.Contains(backend.Pool, ips.NodeIP()):
 		if _, err := s.ScalewayClient.LoadBalancer.AddBackendServers(&lb.ZonedAPIAddBackendServersRequest{
 			Zone:      s.Cluster.LoadBalancerZone(),
 			BackendID: backend.ID,
-			ServerIP:  []string{ips.IP()},
+			ServerIP:  []string{ips.NodeIP()},
 		}); err != nil {
 			return nil, err
 		}
@@ -329,21 +348,18 @@ func (s *Service) Reconcile(ctx context.Context) error {
 
 	s.ScalewayMachine.Status.Addresses = []v1beta1.MachineAddress{}
 
-	// TODO: make sure it's never nil.
-	if machineIPs != nil {
-		if machineIPs.External != nil {
-			s.ScalewayMachine.Status.Addresses = append(s.ScalewayMachine.Status.Addresses, v1beta1.MachineAddress{
-				Type:    v1beta1.MachineExternalIP,
-				Address: *machineIPs.External,
-			})
-		}
+	if machineIPs.External != nil {
+		s.ScalewayMachine.Status.Addresses = append(s.ScalewayMachine.Status.Addresses, v1beta1.MachineAddress{
+			Type:    v1beta1.MachineExternalIP,
+			Address: *machineIPs.External,
+		})
+	}
 
-		if machineIPs.Internal != nil {
-			s.ScalewayMachine.Status.Addresses = append(s.ScalewayMachine.Status.Addresses, v1beta1.MachineAddress{
-				Type:    v1beta1.MachineInternalIP,
-				Address: *machineIPs.Internal,
-			})
-		}
+	if machineIPs.Internal != nil {
+		s.ScalewayMachine.Status.Addresses = append(s.ScalewayMachine.Status.Addresses, v1beta1.MachineAddress{
+			Type:    v1beta1.MachineInternalIP,
+			Address: *machineIPs.Internal,
+		})
 	}
 
 	return nil
@@ -375,7 +391,8 @@ func (s *Service) Delete(ctx context.Context) error {
 			}
 		}
 
-		if _, err := s.ensureControlPlaneLoadBalancer(ctx, server, pnic, true); err != nil {
+		_, err := s.ensureControlPlaneLoadBalancer(ctx, server, pnic, true)
+		if err != nil && !errors.Is(err, client.ErrNoItemFound) {
 			return err
 		}
 	}
