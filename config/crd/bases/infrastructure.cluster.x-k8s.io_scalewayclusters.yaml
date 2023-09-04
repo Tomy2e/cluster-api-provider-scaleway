@@ -54,6 +54,7 @@ spec:
                 properties:
                   ip:
                     description: IP to use when creating a loadbalancer.
+                    format: ipv4
                     type: string
                   type:
                     default: LB-S
@@ -113,6 +114,7 @@ spec:
                         type: string
                       ip:
                         description: IP to use when creating a Public Gateway.
+                        format: ipv4
                         type: string
                       type:
                         default: VPC-GW-S

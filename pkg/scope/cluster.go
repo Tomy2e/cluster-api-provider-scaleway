@@ -123,7 +123,8 @@ func (c *Cluster) LoadBalancerZone() scw.Zone {
 }
 
 func (c *Cluster) PublicGatewayZone() scw.Zone {
-	if c.ScalewayCluster.Spec.Network.PublicGateway != nil &&
+	if c.ScalewayCluster.Spec.Network != nil &&
+		c.ScalewayCluster.Spec.Network.PublicGateway != nil &&
 		c.ScalewayCluster.Spec.Network.PublicGateway.Zone != nil {
 		return scw.Zone(*c.ScalewayCluster.Spec.Network.PublicGateway.Zone)
 	}
@@ -156,12 +157,14 @@ func (c *Cluster) ShouldManagePrivateNetwork() bool {
 // HasPrivateNetwork returns true if the Cluster has a Private Network (either
 // managed by the cluster or an existing one).
 func (c *Cluster) HasPrivateNetwork() bool {
-	return c.ScalewayCluster.Spec.Network.PrivateNetwork != nil &&
+	return c.ScalewayCluster.Spec.Network != nil &&
+		c.ScalewayCluster.Spec.Network.PrivateNetwork != nil &&
 		c.ScalewayCluster.Spec.Network.PrivateNetwork.Enabled
 }
 
 func (c *Cluster) HasPublicGateway() bool {
-	return c.ScalewayCluster.Spec.Network.PublicGateway != nil &&
+	return c.ScalewayCluster.Spec.Network != nil &&
+		c.ScalewayCluster.Spec.Network.PublicGateway != nil &&
 		c.ScalewayCluster.Spec.Network.PublicGateway.Enabled
 }
 

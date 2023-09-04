@@ -88,6 +88,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ScalewayMachine")
 		os.Exit(1)
 	}
+	if err = (&infrastructurev1beta1.ScalewayCluster{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ScalewayCluster")
+		os.Exit(1)
+	}
+	if err = (&infrastructurev1beta1.ScalewayMachine{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ScalewayMachine")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

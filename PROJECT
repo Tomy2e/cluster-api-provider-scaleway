@@ -17,6 +17,9 @@ resources:
   kind: ScalewayCluster
   path: github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1
   version: v1beta1
+  webhooks:
+    validation: true
+    webhookVersion: v1
 - api:
     crdVersion: v1
     namespaced: true
@@ -26,6 +29,9 @@ resources:
   kind: ScalewayMachine
   path: github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1
   version: v1beta1
+  webhooks:
+    validation: true
+    webhookVersion: v1
 - api:
     crdVersion: v1
     namespaced: true

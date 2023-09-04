@@ -13,10 +13,9 @@ type ScalewayClusterSpec struct {
 	// +optional
 	ControlPlaneEndpoint clusterv1beta1.APIEndpoint `json:"controlPlaneEndpoint"`
 
-	// TODO: enforce immutable field(s)
-
 	// FailureDomains is a list of failure domains where the control-plane nodes
 	// and resources (loadbalancer, public gateway, etc.) will be created.
+	// +optional
 	FailureDomains []string `json:"failureDomains,omitempty"`
 
 	// Region represents the region where the cluster will be hosted.
@@ -24,11 +23,11 @@ type ScalewayClusterSpec struct {
 
 	// Network contains network related options for the cluster.
 	// +optional
-	Network NetworkSpec `json:"network"`
+	Network *NetworkSpec `json:"network,omitempty"`
 
 	// ControlPlaneLoadBalancer contains loadbalancer options.
 	// +optional
-	ControlPlaneLoadBalancer *LoadBalancerSpec `json:"controlPlaneLoadBalancer"`
+	ControlPlaneLoadBalancer *LoadBalancerSpec `json:"controlPlaneLoadBalancer,omitempty"`
 
 	// Name of the secret that contains the Scaleway client parameters.
 	// The following keys must be set: accessKey, secretKey, projectID.
@@ -85,6 +84,8 @@ type PublicGatewaySpec struct {
 	Type *string `json:"type,omitempty"`
 
 	// IP to use when creating a Public Gateway.
+	// +kubebuilder:validation:Format=ipv4
+	// +optional
 	IP *string `json:"ip,omitempty"`
 
 	// Zone where to create the Public Gateway. Must be in the same region as the
@@ -106,6 +107,8 @@ type LoadBalancerSpec struct {
 	Type *string `json:"type,omitempty"`
 
 	// IP to use when creating a loadbalancer.
+	// +kubebuilder:validation:Format=ipv4
+	// +optional
 	IP *string `json:"ip,omitempty"`
 }
 

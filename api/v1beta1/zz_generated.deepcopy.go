@@ -6,7 +6,7 @@
 package v1beta1
 
 import (
-	runtime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime"
 	apiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
@@ -218,7 +218,11 @@ func (in *ScalewayClusterSpec) DeepCopyInto(out *ScalewayClusterSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	in.Network.DeepCopyInto(&out.Network)
+	if in.Network != nil {
+		in, out := &in.Network, &out.Network
+		*out = new(NetworkSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ControlPlaneLoadBalancer != nil {
 		in, out := &in.ControlPlaneLoadBalancer, &out.ControlPlaneLoadBalancer
 		*out = new(LoadBalancerSpec)

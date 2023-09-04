@@ -9,8 +9,6 @@ const MachineFinalizer = "scalewaymachine.infrastructure.cluster.x-k8s.io"
 
 // ScalewayMachineSpec defines the desired state of ScalewayMachine
 type ScalewayMachineSpec struct {
-	// TODO: enforce immutable field(s)
-
 	// +optional
 	ProviderID *string `json:"providerID,omitempty"`
 
