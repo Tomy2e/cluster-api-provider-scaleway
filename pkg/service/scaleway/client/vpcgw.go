@@ -66,3 +66,17 @@ func (c *Client) FindGatewayIPByTags(ctx context.Context, zone scw.Zone, tags []
 
 	return ips.IPs[0], nil
 }
+
+func (c *Client) FindGatewaysByPrivateNetworkID(ctx context.Context, zones []scw.Zone, privateNetworkID string) ([]*vpcgw.Gateway, error) {
+	resp, err := c.PublicGateway.ListGateways(&vpcgw.ListGatewaysRequest{
+		PrivateNetworkID: scw.StringPtr(privateNetworkID),
+		Zone:             scw.ZoneFrPar1,
+	}, scw.WithContext(ctx), scw.WithAllPages(), scw.WithZones(zones...))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list public gateways by private network ID: %w", err)
+	}
+
+	gws := make([]*vpcgw.Gateway, 0, len(resp.Gateways))
+	gws = append(gws, resp.Gateways...)
+	return gws, nil
+}

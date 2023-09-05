@@ -226,9 +226,20 @@ func (r *ScalewayCluster) enforceImmutability(old *ScalewayCluster) error {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "network"), r.Spec.Network, "field is immutable"))
 	}
 
-	// TODO: allow updating load balancer type when it's implemented.
-	if !reflect.DeepEqual(r.Spec.ControlPlaneLoadBalancer, old.Spec.ControlPlaneLoadBalancer) {
-		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "controlPlaneLoadBalancer"), r.Spec.ControlPlaneLoadBalancer, "field is immutable"))
+	if old.Spec.ControlPlaneLoadBalancer == nil {
+		old.Spec.ControlPlaneLoadBalancer = &LoadBalancerSpec{}
+	}
+
+	if r.Spec.ControlPlaneLoadBalancer == nil {
+		r.Spec.ControlPlaneLoadBalancer = &LoadBalancerSpec{}
+	}
+
+	if !reflect.DeepEqual(old.Spec.ControlPlaneLoadBalancer.Zone, r.Spec.ControlPlaneLoadBalancer.Zone) {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "controlPlaneLoadBalancer", "zone"), r.Spec.ControlPlaneLoadBalancer.Zone, "field is immutable"))
+	}
+
+	if !reflect.DeepEqual(old.Spec.ControlPlaneLoadBalancer.IP, r.Spec.ControlPlaneLoadBalancer.IP) {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "controlPlaneLoadBalancer", "ip"), r.Spec.ControlPlaneLoadBalancer.IP, "field is immutable"))
 	}
 
 	if allErrs == nil {

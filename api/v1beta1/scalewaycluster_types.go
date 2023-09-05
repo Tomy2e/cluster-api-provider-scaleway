@@ -110,6 +110,14 @@ type LoadBalancerSpec struct {
 	// +kubebuilder:validation:Format=ipv4
 	// +optional
 	IP *string `json:"ip,omitempty"`
+
+	// AllowedRanges allows to set a list of allowed IP ranges that can access
+	// the cluster through the load balancer. When unset, all IP ranges are allowed.
+	// To allow the cluster to work properly, public IPs of nodes and Public
+	// Gateways will automatically be allowed. However, if this field is set,
+	// you MUST manually allow IPs of the nodes of your management cluster.
+	// +optional
+	AllowedRanges []string `json:"allowedRanges,omitempty"`
 }
 
 // ScalewayClusterStatus defines the observed state of ScalewayCluster

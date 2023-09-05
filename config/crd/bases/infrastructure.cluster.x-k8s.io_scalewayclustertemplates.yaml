@@ -68,6 +68,17 @@ spec:
                         description: ControlPlaneLoadBalancer contains loadbalancer
                           options.
                         properties:
+                          allowedRanges:
+                            description: AllowedRanges allows to set a list of allowed
+                              IP ranges that can access the cluster through the load
+                              balancer. When unset, all IP ranges are allowed. To
+                              allow the cluster to work properly, public IPs of nodes
+                              and Public Gateways will automatically be allowed. However,
+                              if this field is set, you MUST manually allow IPs of
+                              the nodes of your management cluster.
+                            items:
+                              type: string
+                            type: array
                           ip:
                             description: IP to use when creating a loadbalancer.
                             format: ipv4

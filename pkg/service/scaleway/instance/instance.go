@@ -15,7 +15,7 @@ import (
 	"github.com/scaleway/scaleway-sdk-go/api/lb/v1"
 	"github.com/scaleway/scaleway-sdk-go/api/marketplace/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
-	"k8s.io/utils/strings/slices"
+	"golang.org/x/exp/slices"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 )
@@ -271,6 +271,66 @@ func (s *Service) ensureServerStarted(ctx context.Context, server *instance.Serv
 	return nil
 }
 
+func (s *Service) ensureLoadBalancerACL(ctx context.Context, publicIP *string) error {
+	frontend, err := s.ScalewayClient.FindLoadBalancerFrontendByNames(
+		ctx,
+		s.Cluster.LoadBalancerZone(),
+		s.Cluster.Name(),
+		loadbalancer.ControlPlaneFrontendName,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to find load balancer frontend: %w", err)
+	}
+
+	acl, err := s.ScalewayClient.FindLoadBalancerACLByName(ctx, s.LoadBalancerZone(), frontend.ID, s.Name())
+	if err != nil && !errors.Is(err, client.ErrNoItemFound) {
+		return fmt.Errorf("failed to find load balancer ACL: %w", err)
+	}
+
+	if publicIP == nil {
+		if acl != nil {
+			if err := s.ScalewayClient.LoadBalancer.DeleteACL(&lb.ZonedAPIDeleteACLRequest{
+				Zone:  s.LoadBalancerZone(),
+				ACLID: acl.ID,
+			}, scw.WithContext(ctx)); err != nil {
+				return fmt.Errorf("failed to delete load balancer ACL: %w", err)
+			}
+		}
+
+		return nil
+	}
+
+	match := scw.StringSlicePtr([]string{*publicIP})
+
+	if acl == nil {
+		_, err := s.ScalewayClient.LoadBalancer.CreateACL(&lb.ZonedAPICreateACLRequest{
+			Zone:       s.LoadBalancerZone(),
+			FrontendID: frontend.ID,
+			Name:       s.Name(),
+			Action:     &lb.ACLAction{Type: lb.ACLActionTypeAllow},
+			Match:      &lb.ACLMatch{IPSubnet: match},
+			Index:      3,
+		}, scw.WithContext(ctx))
+
+		return err
+	}
+
+	if acl.Match == nil || !slices.Equal(match, acl.Match.IPSubnet) {
+		_, err := s.ScalewayClient.LoadBalancer.UpdateACL(&lb.ZonedAPIUpdateACLRequest{
+			Zone:   s.LoadBalancerZone(),
+			ACLID:  acl.ID,
+			Name:   s.Name(),
+			Action: &lb.ACLAction{Type: lb.ACLActionTypeAllow},
+			Match:  &lb.ACLMatch{IPSubnet: match},
+			Index:  3,
+		}, scw.WithContext(ctx))
+
+		return err
+	}
+
+	return nil
+}
+
 func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *instance.Server, pnic *instance.PrivateNIC, deletion bool) (*machineIPs, error) {
 	if !util.IsControlPlaneMachine(s.Machine.Machine) {
 		return nil, nil
@@ -336,6 +396,10 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return err
 	}
 
+	if err := s.ensureLoadBalancerACL(ctx, machineIPs.External); err != nil {
+		return err
+	}
+
 	if err := s.ensureCloudInit(ctx, server, machineIPs); err != nil {
 		return err
 	}
@@ -372,6 +436,11 @@ func (s *Service) Delete(ctx context.Context) error {
 			return nil
 		}
 
+		return err
+	}
+
+	// Set publicIP to nil to force deletion.
+	if err := s.ensureLoadBalancerACL(ctx, nil); err != nil && !errors.Is(err, client.ErrNoItemFound) {
 		return err
 	}
 

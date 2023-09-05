@@ -66,14 +66,9 @@ func (s *Service) getOrCreateLB(ctx context.Context, zone scw.Zone) (*lb.LB, err
 	return loadbalancer, nil
 }
 
-func (s *Service) ensurePrivateNetwork(ctx context.Context, loadbalancer *lb.LB) error {
+func (s *Service) ensurePrivateNetwork(ctx context.Context, loadbalancer *lb.LB, pnID string) error {
 	if !s.HasPrivateNetwork() {
 		return nil
-	}
-
-	pnID, err := s.PrivateNetworkID()
-	if err != nil {
-		return err
 	}
 
 	lbPNs, err := s.ScalewayClient.LoadBalancer.ListLBPrivateNetworks(&lb.ZonedAPIListLBPrivateNetworksRequest{
@@ -187,6 +182,108 @@ func (s *Service) ensureFrontend(ctx context.Context, loadbalancer *lb.LB, backe
 	return frontend, nil
 }
 
+// ensureACL ensures the ACL with specified parameters exists or doesn't exist.
+// If the ACL doesn't contain any IP, this method will ensure the ACL doesn't exist.
+func (s *Service) ensureACL(ctx context.Context, frontendID, name string, ips []string, deny bool, index int32) error {
+	acl, err := s.ScalewayClient.FindLoadBalancerACLByName(ctx, s.LoadBalancerZone(), frontendID, name)
+	if err != nil && !errors.Is(err, client.ErrNoItemFound) {
+		return err
+	}
+
+	// Remove ACL / Do nothing if there is no IP in it.
+	if len(ips) == 0 {
+		if acl != nil {
+			if err := s.ScalewayClient.LoadBalancer.DeleteACL(&lb.ZonedAPIDeleteACLRequest{
+				Zone:  s.LoadBalancerZone(),
+				ACLID: acl.ID,
+			}, scw.WithContext(ctx)); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	action := lb.ACLActionTypeAllow
+	if deny {
+		action = lb.ACLActionTypeDeny
+	}
+
+	// Create ACL if it does not exist.
+	if acl == nil {
+		_, err := s.ScalewayClient.LoadBalancer.CreateACL(&lb.ZonedAPICreateACLRequest{
+			Zone:       s.LoadBalancerZone(),
+			FrontendID: frontendID,
+			Name:       name,
+			Index:      index,
+			Action:     &lb.ACLAction{Type: action},
+			Match:      &lb.ACLMatch{IPSubnet: scw.StringSlicePtr(ips)},
+		}, scw.WithContext(ctx))
+
+		return err
+	}
+
+	// Update ACL if ips are different.
+	if acl.Match == nil || !slices.Equal(scw.StringSlicePtr(ips), acl.Match.IPSubnet) {
+		_, err = s.ScalewayClient.LoadBalancer.UpdateACL(&lb.ZonedAPIUpdateACLRequest{
+			Zone:   s.LoadBalancerZone(),
+			ACLID:  acl.ID,
+			Name:   name,
+			Action: &lb.ACLAction{Type: action},
+			Index:  index,
+			Match:  &lb.ACLMatch{IPSubnet: scw.StringSlicePtr(ips)},
+		}, scw.WithContext(ctx))
+		return err
+	}
+
+	return nil
+}
+
+func (s *Service) ensureACLs(ctx context.Context, frontend *lb.Frontend, pnID string) error {
+	// Set the Allowed Ranges ACL.
+	var (
+		allowedRanges []string
+		denyAll       []string
+	)
+
+	if s.ScalewayCluster.Spec.ControlPlaneLoadBalancer != nil && len(s.ScalewayCluster.Spec.ControlPlaneLoadBalancer.AllowedRanges) > 0 {
+		allowedRanges = s.ScalewayCluster.Spec.ControlPlaneLoadBalancer.AllowedRanges
+		denyAll = []string{"0.0.0.0/0", "::/0"}
+	}
+
+	if err := s.ensureACL(ctx, frontend.ID, "allowed-ranges", allowedRanges, false, 1); err != nil {
+		return fmt.Errorf("failed to set allowed-ranges ACL: %w", err)
+	}
+
+	// Set the Public Gateway ACL.
+	if s.HasPrivateNetwork() {
+		gws, err := s.ScalewayClient.FindGatewaysByPrivateNetworkID(ctx, s.Zones(s.ScalewayClient.VPCGW.Zones()), pnID)
+		if err != nil {
+			return err
+		}
+
+		var ips []string
+
+		for _, gw := range gws {
+			if gw.IP != nil {
+				ips = append(ips, gw.IP.Address.String())
+			}
+		}
+
+		if err := s.ensureACL(ctx, frontend.ID, "public-gateway", ips, false, 2); err != nil {
+			return err
+		}
+	}
+
+	// Set the Deny All ACL. If denyAll is empty, it will not be created (or it
+	// will be deleted if it exists).
+	if err := s.ensureACL(ctx, frontend.ID, "deny-all", denyAll, true, 4); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *Service) Reconcile(ctx context.Context) error {
 	loadbalancer, err := s.getOrCreateLB(ctx, s.LoadBalancerZone())
 	if err != nil {
@@ -197,18 +294,27 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return ErrLoadBalancerNotReady
 	}
 
-	if err := s.ensurePrivateNetwork(ctx, loadbalancer); err != nil {
+	pnID, err := s.PrivateNetworkID()
+	if err != nil {
+		return err
+	}
+
+	if err := s.ensurePrivateNetwork(ctx, loadbalancer, pnID); err != nil {
 		return err
 	}
 
 	backend, err := s.ensureBackend(ctx, loadbalancer)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to ensure LoadBalancer backend: %w", err)
 	}
 
 	frontend, err := s.ensureFrontend(ctx, loadbalancer, backend)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to ensure LoadBalancer frontend: %w", err)
+	}
+
+	if err := s.ensureACLs(ctx, frontend, pnID); err != nil {
+		return fmt.Errorf("failed to ensure LoadBalancer ACLs: %w", err)
 	}
 
 	var found bool
