@@ -66,8 +66,8 @@ func (s *Service) getOrCreateLB(ctx context.Context, zone scw.Zone) (*lb.LB, err
 	return loadbalancer, nil
 }
 
-func (s *Service) ensurePrivateNetwork(ctx context.Context, loadbalancer *lb.LB, pnID string) error {
-	if !s.HasPrivateNetwork() {
+func (s *Service) ensurePrivateNetwork(ctx context.Context, loadbalancer *lb.LB, pnID *string) error {
+	if pnID == nil {
 		return nil
 	}
 
@@ -80,14 +80,14 @@ func (s *Service) ensurePrivateNetwork(ctx context.Context, loadbalancer *lb.LB,
 	}
 
 	found := slices.IndexFunc(lbPNs.PrivateNetwork, func(lbPN *lb.PrivateNetwork) bool {
-		return lbPN.PrivateNetworkID == pnID
+		return lbPN.PrivateNetworkID == *pnID
 	})
 
 	if found == -1 {
 		if _, err := s.ScalewayClient.LoadBalancer.AttachPrivateNetwork(&lb.ZonedAPIAttachPrivateNetworkRequest{
 			Zone:             loadbalancer.Zone,
 			LBID:             loadbalancer.ID,
-			PrivateNetworkID: pnID,
+			PrivateNetworkID: *pnID,
 			IpamConfig:       &lb.PrivateNetworkIpamConfig{},
 		}, scw.WithContext(ctx)); err != nil {
 			return err
@@ -239,7 +239,7 @@ func (s *Service) ensureACL(ctx context.Context, frontendID, name string, ips []
 	return nil
 }
 
-func (s *Service) ensureACLs(ctx context.Context, frontend *lb.Frontend, pnID string) error {
+func (s *Service) ensureACLs(ctx context.Context, frontend *lb.Frontend, pnID *string) error {
 	// Set the Allowed Ranges ACL.
 	var (
 		allowedRanges []string
@@ -256,8 +256,8 @@ func (s *Service) ensureACLs(ctx context.Context, frontend *lb.Frontend, pnID st
 	}
 
 	// Set the Public Gateway ACL.
-	if s.HasPrivateNetwork() {
-		gws, err := s.ScalewayClient.FindGatewaysByPrivateNetworkID(ctx, s.Zones(s.ScalewayClient.VPCGW.Zones()), pnID)
+	if pnID != nil && s.HasPrivateNetwork() {
+		gws, err := s.ScalewayClient.FindGatewaysByPrivateNetworkID(ctx, s.Zones(s.ScalewayClient.VPCGW.Zones()), *pnID)
 		if err != nil {
 			return err
 		}
@@ -294,9 +294,15 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return ErrLoadBalancerNotReady
 	}
 
-	pnID, err := s.PrivateNetworkID()
-	if err != nil {
-		return err
+	var pnID *string
+
+	if s.HasPrivateNetwork() {
+		tmpPNID, err := s.PrivateNetworkID()
+		if err != nil {
+			return err
+		}
+
+		pnID = &tmpPNID
 	}
 
 	if err := s.ensurePrivateNetwork(ctx, loadbalancer, pnID); err != nil {

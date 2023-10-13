@@ -267,6 +267,14 @@ func (r *ScalewayCluster) enforceImmutability(old *ScalewayCluster) error {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "scalewaySecretName"), r.Spec.ScalewaySecretName, "field is immutable"))
 	}
 
+	if r.Spec.Network == nil {
+		r.Spec.Network = &NetworkSpec{}
+	}
+
+	if old.Spec.Network == nil {
+		old.Spec.Network = &NetworkSpec{}
+	}
+
 	if !reflect.DeepEqual(r.Spec.Network.PrivateNetwork, old.Spec.Network.PrivateNetwork) {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "network", "privateNetwork"), r.Spec.Network.PrivateNetwork, "field is immutable"))
 	}

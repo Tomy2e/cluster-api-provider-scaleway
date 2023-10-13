@@ -25,6 +25,8 @@ var (
 	ErrInstanceNotStoppedYet = errors.New("instance is being stopped")
 )
 
+var errMachineHasNoIP = errors.New("machine has no IP")
+
 type Service struct {
 	*scope.Machine
 }
@@ -203,7 +205,7 @@ func (s *Service) getMachineIPs(ctx context.Context, server *instance.Server, pn
 	}
 
 	if m.External == nil && m.Internal == nil {
-		return nil, errors.New("machine has no IP")
+		return nil, errMachineHasNoIP
 	}
 
 	return m, nil
@@ -344,15 +346,9 @@ func (s *Service) ensureLoadBalancerACL(ctx context.Context, publicIP *string) e
 	return nil
 }
 
-func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *instance.Server, pnic *instance.PrivateNIC, deletion bool) (*machineIPs, error) {
-	// TODO: getMachineIPs out of this method
-	ips, err := s.getMachineIPs(ctx, server, pnic)
-	if err != nil {
-		return nil, err
-	}
-
+func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *instance.Server, pnic *instance.PrivateNIC, ips *machineIPs, deletion bool) error {
 	if !util.IsControlPlaneMachine(s.Machine.Machine) {
-		return ips, nil
+		return nil
 	}
 
 	backend, err := s.ScalewayClient.FindLoadBalancerBackendByNames(
@@ -362,7 +358,7 @@ func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *in
 		loadbalancer.ControlPlaneBackendName,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find load balancer backend: %w", err)
+		return fmt.Errorf("failed to find load balancer backend: %w", err)
 	}
 
 	switch {
@@ -373,7 +369,7 @@ func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *in
 				BackendID: backend.ID,
 				ServerIP:  []string{ips.NodeIP()},
 			}); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	case !deletion && !slices.Contains(backend.Pool, ips.NodeIP()):
@@ -382,11 +378,11 @@ func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *in
 			BackendID: backend.ID,
 			ServerIP:  []string{ips.NodeIP()},
 		}); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return ips, nil
+	return nil
 }
 
 func (s *Service) Reconcile(ctx context.Context) error {
@@ -405,8 +401,12 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return err
 	}
 
-	machineIPs, err := s.ensureControlPlaneLoadBalancer(ctx, server, pnic, false)
+	machineIPs, err := s.getMachineIPs(ctx, server, pnic)
 	if err != nil {
+		return err
+	}
+
+	if err := s.ensureControlPlaneLoadBalancer(ctx, server, pnic, machineIPs, false); err != nil {
 		return err
 	}
 
@@ -474,9 +474,16 @@ func (s *Service) Delete(ctx context.Context) error {
 			}
 		}
 
-		_, err := s.ensureControlPlaneLoadBalancer(ctx, server, pnic, true)
-		if err != nil && !errors.Is(err, client.ErrNoItemFound) {
-			return err
+		machineIPs, err := s.getMachineIPs(ctx, server, pnic)
+		if err != nil && !errors.Is(err, errMachineHasNoIP) {
+			return fmt.Errorf("failed to get machine IPs for control-plane machine: %w", err)
+		}
+
+		if machineIPs != nil {
+			err = s.ensureControlPlaneLoadBalancer(ctx, server, pnic, machineIPs, true)
+			if err != nil && !errors.Is(err, client.ErrNoItemFound) {
+				return err
+			}
 		}
 	}
 
