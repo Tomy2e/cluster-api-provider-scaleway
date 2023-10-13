@@ -7,10 +7,8 @@ import (
 
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
-	"github.com/scaleway/scaleway-sdk-go/api/vpc/v2"
 	"github.com/scaleway/scaleway-sdk-go/api/vpcgw/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
-	"golang.org/x/exp/slices"
 )
 
 const defaultVPCGWType = "VPC-GW-S"
@@ -104,21 +102,6 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return err
 	}
 
-	pn, err := s.ClusterScope.ScalewayClient.VPC.GetPrivateNetwork(&vpc.GetPrivateNetworkRequest{
-		Region:           s.ClusterScope.Region(),
-		PrivateNetworkID: pnID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to get Private Network %q: %w", pnID, err)
-	}
-
-	idx := slices.IndexFunc(pn.Subnets, func(subnet *vpc.Subnet) bool {
-		return subnet.Subnet.IP.To4() != nil
-	})
-	if idx == -1 {
-		return errors.New("the Private Network has no ipv4 subnet")
-	}
-
 	// Check if gateway is already attached to the PN.
 	gwNeworks, err := s.ClusterScope.ScalewayClient.VPCGW.ListGatewayNetworks(&vpcgw.ListGatewayNetworksRequest{
 		Zone:             zone,
@@ -136,10 +119,8 @@ func (s *Service) Reconcile(ctx context.Context) error {
 			PrivateNetworkID: pnID,
 			EnableDHCP:       scw.BoolPtr(true),
 			EnableMasquerade: true,
-			DHCP: &vpcgw.CreateDHCPRequest{
-				PushDefaultRoute: scw.BoolPtr(true),
-				ProjectID:        s.ClusterScope.ScalewayClient.ProjectID,
-				Subnet:           pn.Subnets[idx].Subnet,
+			IpamConfig: &vpcgw.IpamConfig{
+				PushDefaultRoute: true,
 			},
 		}, scw.WithContext(ctx)); err != nil {
 			return err

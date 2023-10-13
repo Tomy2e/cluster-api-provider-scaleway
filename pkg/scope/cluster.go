@@ -202,3 +202,9 @@ func (c *Cluster) Tags() []string {
 		fmt.Sprintf("caps-cluster=%s", c.Name()),
 	}
 }
+
+// SecurityGroupName returns the name of the security group resource that will
+// be created.
+func (c *Cluster) SecurityGroupName(name string) string {
+	return fmt.Sprintf("%s-%s", c.Name(), name)
+}

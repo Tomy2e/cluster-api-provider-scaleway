@@ -90,6 +90,18 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 			}
 		}
 
+		// Find security group ID if needed.
+		var sgID *string
+		if s.ScalewayMachine.Spec.SecurityGroupName != nil {
+			sgName := s.SecurityGroupName(*s.ScalewayMachine.Spec.SecurityGroupName)
+			sg, err := s.ScalewayClient.FindSecurityGroupByName(ctx, s.Zone(), sgName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to find security group %q: %w", sgName, err)
+			}
+
+			sgID = &sg.ID
+		}
+
 		req := &instance.CreateServerRequest{
 			Zone:              s.Zone(),
 			Name:              s.Name(),
@@ -97,6 +109,7 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 			DynamicIPRequired: scw.BoolPtr(false),
 			RoutedIPEnabled:   scw.BoolPtr(true),
 			Image:             imageID,
+			SecurityGroup:     sgID,
 			Volumes: map[string]*instance.VolumeServerTemplate{
 				"0": {
 					Size:       scw.SizePtr(rootSize),
@@ -332,8 +345,14 @@ func (s *Service) ensureLoadBalancerACL(ctx context.Context, publicIP *string) e
 }
 
 func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *instance.Server, pnic *instance.PrivateNIC, deletion bool) (*machineIPs, error) {
+	// TODO: getMachineIPs out of this method
+	ips, err := s.getMachineIPs(ctx, server, pnic)
+	if err != nil {
+		return nil, err
+	}
+
 	if !util.IsControlPlaneMachine(s.Machine.Machine) {
-		return nil, nil
+		return ips, nil
 	}
 
 	backend, err := s.ScalewayClient.FindLoadBalancerBackendByNames(
@@ -344,11 +363,6 @@ func (s *Service) ensureControlPlaneLoadBalancer(ctx context.Context, server *in
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find load balancer backend: %w", err)
-	}
-
-	ips, err := s.getMachineIPs(ctx, server, pnic)
-	if err != nil {
-		return nil, err
 	}
 
 	switch {

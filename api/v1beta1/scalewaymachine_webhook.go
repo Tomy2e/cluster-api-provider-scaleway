@@ -70,6 +70,11 @@ func (r *ScalewayMachine) enforceImmutability(old *ScalewayMachine) error {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "publicIP"), r.Spec.PublicIP, "field can only be set to false"))
 	}
 
+	// Cannot change SecurityGroupName.
+	if !reflect.DeepEqual(old.Spec.SecurityGroupName, r.Spec.SecurityGroupName) {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "securityGroupName"), r.Spec.SecurityGroupName, "field is immutable"))
+	}
+
 	if allErrs == nil {
 		return nil
 	}

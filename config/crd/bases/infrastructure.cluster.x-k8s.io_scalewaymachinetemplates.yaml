@@ -64,6 +64,11 @@ spec:
                           GB.
                         format: int64
                         type: integer
+                      securityGroupName:
+                        description: Name of the security group as specified in the
+                          ScalewayCluster object. If not set, the instance will be
+                          attached to the default security group.
+                        type: string
                       type:
                         description: Type of instance (e.g. PRO2-S).
                         type: string

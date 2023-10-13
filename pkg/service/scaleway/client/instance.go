@@ -63,3 +63,21 @@ func (c *Client) FindPrivateNICByPNID(ctx context.Context, server *instance.Serv
 
 	return nil, ErrNoItemFound
 }
+
+func (c *Client) FindSecurityGroupByName(ctx context.Context, zone scw.Zone, name string) (*instance.SecurityGroup, error) {
+	sgs, err := c.Instance.ListSecurityGroups(&instance.ListSecurityGroupsRequest{
+		Zone: zone,
+		Name: scw.StringPtr(name),
+	}, scw.WithContext(ctx), scw.WithAllPages())
+	if err != nil {
+		return nil, err
+	}
+
+	for _, sg := range sgs.SecurityGroups {
+		if sg.Name == name {
+			return sg, nil
+		}
+	}
+
+	return nil, ErrNoItemFound
+}

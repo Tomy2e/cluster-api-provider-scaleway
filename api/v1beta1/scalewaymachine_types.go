@@ -27,6 +27,11 @@ type ScalewayMachineSpec struct {
 	// Defaults to false.
 	// +optional
 	PublicIP *bool `json:"publicIP,omitempty"`
+
+	// Name of the security group as specified in the ScalewayCluster object.
+	// If not set, the instance will be attached to the default security group.
+	// +optional
+	SecurityGroupName *string `json:"securityGroupName,omitempty"`
 }
 
 // ScalewayMachineStatus defines the observed state of ScalewayMachine

@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	"net"
 	"reflect"
 
 	"github.com/scaleway/scaleway-sdk-go/scw"
@@ -127,84 +128,128 @@ func (r *ScalewayCluster) validateLoadBalancerSpec(region scw.Region) *field.Err
 }
 
 func (r *ScalewayCluster) validateNetworkSpec(region scw.Region) *field.Error {
-	// Currently, this field is mandatory.
+	// If network is not set, there is nothing to validate.
 	if r.Spec.Network == nil {
-		return field.Invalid(
-			field.NewPath("spec", "network"),
-			false,
-			"network must be set",
-		)
+		return nil
 	}
 
-	// Currently, using a PrivateNetwork is mandatory.
-	if r.Spec.Network.PrivateNetwork == nil || !r.Spec.Network.PrivateNetwork.Enabled {
-		return field.Invalid(
-			field.NewPath("spec", "network", "privateNetwork", "enabled"),
-			false,
-			"private network must be enabled",
-		)
+	if r.Spec.Network.PublicGateway != nil {
+		if r.Spec.Network.PublicGateway.Zone != nil {
+			zone, err := scw.ParseZone(*r.Spec.Network.PublicGateway.Zone)
+			if err != nil {
+				return field.Invalid(
+					field.NewPath("spec", "network", "publicGateway", "zone"),
+					*r.Spec.Network.PublicGateway.Zone,
+					err.Error(),
+				)
+			}
+
+			zoneRegion, err := zone.Region()
+			if err != nil {
+				return field.Invalid(
+					field.NewPath("spec", "network", "publicGateway", "zone"),
+					*r.Spec.Network.PublicGateway.Zone,
+					err.Error(),
+				)
+			}
+
+			if region != zoneRegion {
+				return field.Invalid(
+					field.NewPath("spec", "network", "publicGateway", "zone"),
+					*r.Spec.Network.PublicGateway.Zone,
+					"public gateway must be in the cluster region",
+				)
+			}
+		}
+
+		if r.Spec.Network.PublicGateway.ID != nil {
+			if r.Spec.Network.PublicGateway.Type != nil {
+				return field.Invalid(
+					field.NewPath("spec", "network", "publicGateway", "type"),
+					*r.Spec.Network.PublicGateway.Type,
+					"type should not be specified because id is set",
+				)
+			}
+
+			if r.Spec.Network.PublicGateway.IP != nil {
+				return field.Invalid(
+					field.NewPath("spec", "network", "publicGateway", "ip"),
+					*r.Spec.Network.PublicGateway.IP,
+					"ip should not be specified because id is set",
+				)
+			}
+
+			if r.Spec.Network.PublicGateway.Zone == nil {
+				return field.Invalid(
+					field.NewPath("spec", "network", "publicGateway", "zone"),
+					*r.Spec.Network.PublicGateway.Zone,
+					"zone is needed",
+				)
+			}
+		}
+
+		if r.Spec.Network.PrivateNetwork != nil {
+			// Subnet won't work with an existing Private Network.
+			if r.Spec.Network.PrivateNetwork.Subnet != nil &&
+				r.Spec.Network.PrivateNetwork.ID != nil {
+				return field.Invalid(
+					field.NewPath("spec", "network", "privateNetwork", "subnet"),
+					*r.Spec.Network.PrivateNetwork.Subnet,
+					"not compatible with an existing PrivateNetwork",
+				)
+			}
+		}
 	}
 
-	// Currently, using a PublicGateway is mandatory.
-	if r.Spec.Network.PublicGateway == nil || !r.Spec.Network.PublicGateway.Enabled {
-		return field.Invalid(
-			field.NewPath("spec", "network", "publicGateway", "enabled"),
-			false,
-			"public gateway must be enabled",
-		)
-	}
-
-	if r.Spec.Network.PublicGateway.Zone != nil {
-		zone, err := scw.ParseZone(*r.Spec.Network.PublicGateway.Zone)
-		if err != nil {
-			return field.Invalid(
-				field.NewPath("spec", "network", "publicGateway", "zone"),
-				*r.Spec.Network.PublicGateway.Zone,
-				err.Error(),
-			)
+	uniqueNames := make(map[string]struct{})
+	for i, sg := range r.Spec.Network.SecurityGroups {
+		path := field.NewPath("spec", "network", "securityGroups").Index(i)
+		// Verify there is no duplicate security group name.
+		if _, ok := uniqueNames[sg.Name]; ok {
+			return field.Invalid(path, sg.Name, "duplicate name")
 		}
 
-		zoneRegion, err := zone.Region()
-		if err != nil {
-			return field.Invalid(
-				field.NewPath("spec", "network", "publicGateway", "zone"),
-				*r.Spec.Network.PublicGateway.Zone,
-				err.Error(),
-			)
+		uniqueNames[sg.Name] = struct{}{}
+
+		if err := r.validateSecurityGroupPolicy(sg.Inbound, path.Child("inbound")); err != nil {
+			return err
 		}
 
-		if region != zoneRegion {
-			return field.Invalid(
-				field.NewPath("spec", "network", "publicGateway", "zone"),
-				*r.Spec.Network.PublicGateway.Zone,
-				"public gateway must be in the cluster region",
-			)
+		if err := r.validateSecurityGroupPolicy(sg.Outbound, path.Child("outbound")); err != nil {
+			return err
 		}
 	}
 
-	if r.Spec.Network.PublicGateway.ID != nil {
-		if r.Spec.Network.PublicGateway.Type != nil {
-			return field.Invalid(
-				field.NewPath("spec", "network", "publicGateway", "type"),
-				*r.Spec.Network.PublicGateway.Type,
-				"type should not be specified because id is set",
-			)
+	return nil
+}
+
+func (r *ScalewayCluster) validateSecurityGroupPolicy(sgp *SecurityGroupPolicy, path *field.Path) *field.Error {
+	if sgp == nil {
+		return nil
+	}
+
+	if _, err := sgp.Default.ToInstancePolicy(); err != nil {
+		return field.Invalid(path.Child("default"), sgp.Default, err.Error())
+	}
+
+	for i, rule := range sgp.Rules {
+		innerPath := path.Child("rules").Index(i)
+		if _, err := rule.Action.ToInstanceAction(); err != nil {
+			return field.Invalid(innerPath.Child("action"), rule.Action, err.Error())
 		}
 
-		if r.Spec.Network.PublicGateway.IP != nil {
-			return field.Invalid(
-				field.NewPath("spec", "network", "publicGateway", "ip"),
-				*r.Spec.Network.PublicGateway.IP,
-				"ip should not be specified because id is set",
-			)
+		if _, err := rule.Protocol.ToInstance(); err != nil {
+			return field.Invalid(innerPath.Child("protocol"), rule.Protocol, err.Error())
 		}
 
-		if r.Spec.Network.PublicGateway.Zone == nil {
-			return field.Invalid(
-				field.NewPath("spec", "network", "publicGateway", "zone"),
-				*r.Spec.Network.PublicGateway.Zone,
-				"zone is needed",
-			)
+		if _, _, err := rule.Ports.ToRange(); err != nil {
+			return field.Invalid(innerPath.Child("ports"), rule.Ports, err.Error())
+		}
+
+		if rule.IPRange != nil {
+			if _, _, err := net.ParseCIDR(*rule.IPRange); err != nil {
+				return field.Invalid(innerPath.Child("ipRange"), rule.IPRange, err.Error())
+			}
 		}
 	}
 
@@ -222,8 +267,12 @@ func (r *ScalewayCluster) enforceImmutability(old *ScalewayCluster) error {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "scalewaySecretName"), r.Spec.ScalewaySecretName, "field is immutable"))
 	}
 
-	if !reflect.DeepEqual(r.Spec.Network, old.Spec.Network) {
-		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "network"), r.Spec.Network, "field is immutable"))
+	if !reflect.DeepEqual(r.Spec.Network.PrivateNetwork, old.Spec.Network.PrivateNetwork) {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "network", "privateNetwork"), r.Spec.Network.PrivateNetwork, "field is immutable"))
+	}
+
+	if !reflect.DeepEqual(r.Spec.Network.PublicGateway, old.Spec.Network.PublicGateway) {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "network", "publicGateway"), r.Spec.Network.PublicGateway, "field is immutable"))
 	}
 
 	if old.Spec.ControlPlaneLoadBalancer == nil {

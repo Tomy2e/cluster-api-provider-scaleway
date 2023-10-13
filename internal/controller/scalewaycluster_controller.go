@@ -20,6 +20,7 @@ import (
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
 	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/loadbalancer"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/securitygroup"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpc"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/vpcgw"
 	"github.com/scaleway/scaleway-sdk-go/scw"
@@ -108,6 +109,10 @@ func (r *ScalewayClusterReconciler) reconcileNormal(ctx context.Context, cluster
 
 	clusterScope.ScalewayCluster.Status.FailureDomains = clusterScope.FailureDomains()
 
+	if err := securitygroup.NewService(clusterScope).Reconcile(ctx); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if err := vpc.NewService(clusterScope).Reconcile(ctx); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile vpc: %w", err)
 	}
@@ -151,6 +156,10 @@ func (r *ScalewayClusterReconciler) reconcileDelete(ctx context.Context, cluster
 			l.Info("cannot delete Private Network due to precondition failure, retrying", "err", err)
 			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
+		return ctrl.Result{}, err
+	}
+
+	if err := securitygroup.NewService(clusterScope).Delete(ctx); err != nil {
 		return ctrl.Result{}, err
 	}
 

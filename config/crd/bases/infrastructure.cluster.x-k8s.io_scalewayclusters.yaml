@@ -138,6 +138,94 @@ spec:
                     required:
                     - enabled
                     type: object
+                  securityGroups:
+                    description: 'A list of security groups that will be created in
+                      all zones of the region of the cluster. A security group can
+                      be referenced by its name in the ScalewayMachine object. If
+                      a security group is in use by at least one machine, it MUST
+                      NOT be removed from this list: remove the machines first.'
+                    items:
+                      description: SecurityGroup contains a name and inbound/outbound
+                        policies.
+                      properties:
+                        inbound:
+                          description: Inbound policy. If not set, all inbound traffic
+                            is allowed.
+                          properties:
+                            default:
+                              description: Default policy. If unset, defaults to "Accept".
+                              type: string
+                            rules:
+                              description: A list of rules for this policy.
+                              items:
+                                description: SecurityGroupRule is a rule for the security
+                                  group policy.
+                                properties:
+                                  action:
+                                    description: Action to apply when the rule matches
+                                      a packet.
+                                    type: string
+                                  ipRange:
+                                    description: IP range this rule applies to. Defaults
+                                      to 0.0.0.0/0.
+                                    type: string
+                                  ports:
+                                    description: Port or range of ports this rule
+                                      applies to. Not applicable for ICMP or ANY.
+                                    type: string
+                                  protocol:
+                                    description: Protocol family this rule applies
+                                      to. Can be ANY, TCP, UDP or ICMP. If unset,
+                                      defaults to ANY.
+                                    type: string
+                                required:
+                                - action
+                                type: object
+                              type: array
+                          type: object
+                        name:
+                          description: Name of the security group. Must be unique
+                            in a list of security groups.
+                          type: string
+                        outbound:
+                          description: Oubound policy. If not set, all outbound traffic
+                            is allowed.
+                          properties:
+                            default:
+                              description: Default policy. If unset, defaults to "Accept".
+                              type: string
+                            rules:
+                              description: A list of rules for this policy.
+                              items:
+                                description: SecurityGroupRule is a rule for the security
+                                  group policy.
+                                properties:
+                                  action:
+                                    description: Action to apply when the rule matches
+                                      a packet.
+                                    type: string
+                                  ipRange:
+                                    description: IP range this rule applies to. Defaults
+                                      to 0.0.0.0/0.
+                                    type: string
+                                  ports:
+                                    description: Port or range of ports this rule
+                                      applies to. Not applicable for ICMP or ANY.
+                                    type: string
+                                  protocol:
+                                    description: Protocol family this rule applies
+                                      to. Can be ANY, TCP, UDP or ICMP. If unset,
+                                      defaults to ANY.
+                                    type: string
+                                required:
+                                - action
+                                type: object
+                              type: array
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
                 type: object
               region:
                 description: Region represents the region where the cluster will be
