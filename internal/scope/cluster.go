@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	infrastructurev1beta1 "github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1"
-	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
+	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/internal/service/scaleway/client"
 	"github.com/pkg/errors"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	"golang.org/x/exp/slices"

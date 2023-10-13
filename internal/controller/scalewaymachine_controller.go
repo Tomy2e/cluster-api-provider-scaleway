@@ -16,9 +16,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	infrastructurev1beta1 "github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
-	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/instance"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/scope"
+	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/internal/service/scaleway/client"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/service/scaleway/instance"
 )
 
 // ScalewayMachineReconciler reconciles a ScalewayMachine object

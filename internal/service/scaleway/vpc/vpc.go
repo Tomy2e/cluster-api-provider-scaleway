@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/scope"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/service/scaleway/client"
 	"github.com/scaleway/scaleway-sdk-go/api/vpc/v2"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 )

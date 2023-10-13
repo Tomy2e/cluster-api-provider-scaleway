@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/scope"
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	"golang.org/x/exp/slices"

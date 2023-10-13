@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/loadbalancer"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/scope"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/service/scaleway/client"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/service/scaleway/loadbalancer"
 	"github.com/google/uuid"
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	"github.com/scaleway/scaleway-sdk-go/api/lb/v1"

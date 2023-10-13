@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/scope"
-	"github.com/Tomy2e/cluster-api-provider-scaleway/pkg/service/scaleway/client"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/scope"
+	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/service/scaleway/client"
 	"github.com/scaleway/scaleway-sdk-go/api/lb/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	"golang.org/x/exp/slices"
