@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"reflect"
 
 	"github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1"
 	"github.com/Tomy2e/cluster-api-provider-scaleway/internal/scope"
@@ -72,11 +73,11 @@ func compareRules(a []v1beta1.SecurityGroupRule, b []*instance.SecurityGroupRule
 			return false, err
 		}
 
-		if from != b[i].DestPortFrom {
+		if !reflect.DeepEqual(from, b[i].DestPortFrom) {
 			return false, nil
 		}
 
-		if to != b[i].DestPortTo {
+		if !reflect.DeepEqual(to, b[i].DestPortTo) {
 			return false, nil
 		}
 	}
@@ -278,7 +279,12 @@ func (s *Service) ensureSecurityGroups(ctx context.Context, securityGroups []v1b
 					return fmt.Errorf("failed to set security group rules: %w", err)
 				}
 
-				l.Info("security group rules were updated", "securityGroupName", s.SecurityGroupName(sg.Name))
+				l.Info(
+					"security group rules were updated",
+					"securityGroupName", s.SecurityGroupName(sg.Name),
+					"compareInbound", compareInbound,
+					"compareOutbound", compareOutbound,
+				)
 			}
 		}
 	}

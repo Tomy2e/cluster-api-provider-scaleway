@@ -4,6 +4,7 @@ import (
 	"net"
 	"reflect"
 
+	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -238,12 +239,18 @@ func (r *ScalewayCluster) validateSecurityGroupPolicy(sgp *SecurityGroupPolicy, 
 			return field.Invalid(innerPath.Child("action"), rule.Action, err.Error())
 		}
 
-		if _, err := rule.Protocol.ToInstance(); err != nil {
+		proto, err := rule.Protocol.ToInstance()
+		if err != nil {
 			return field.Invalid(innerPath.Child("protocol"), rule.Protocol, err.Error())
 		}
 
 		if _, _, err := rule.Ports.ToRange(); err != nil {
 			return field.Invalid(innerPath.Child("ports"), rule.Ports, err.Error())
+		}
+
+		// When using ANY or ICMP, ports must be nil.
+		if (proto == instance.SecurityGroupRuleProtocolANY || proto == instance.SecurityGroupRuleProtocolICMP) && rule.Ports != nil {
+			return field.Invalid(innerPath.Child("ports"), rule.Ports, "ports must not be set when using ANY or ICMP protocols")
 		}
 
 		if rule.IPRange != nil {
