@@ -2,10 +2,10 @@ package scope
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	infrastructurev1beta1 "github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1"
-	"github.com/pkg/errors"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"

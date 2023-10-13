@@ -2,11 +2,11 @@ package scope
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	infrastructurev1beta1 "github.com/Tomy2e/cluster-api-provider-scaleway/api/v1beta1"
 	scwClient "github.com/Tomy2e/cluster-api-provider-scaleway/internal/service/scaleway/client"
-	"github.com/pkg/errors"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	"golang.org/x/exp/slices"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
