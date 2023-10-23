@@ -56,8 +56,12 @@ func (r *ScalewayMachine) enforceImmutability(old *ScalewayMachine) error {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "type"), r.Spec.Type, "field is immutable"))
 	}
 
-	if old.Spec.RootVolumeSize != nil && r.Spec.RootVolumeSize != nil && *r.Spec.RootVolumeSize != *old.Spec.RootVolumeSize {
+	if !reflect.DeepEqual(old.Spec.RootVolumeSize, r.Spec.RootVolumeSize) {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "rootVolumeSize"), r.Spec.RootVolumeSize, "field is immutable"))
+	}
+
+	if !reflect.DeepEqual(old.Spec.RootVolumeType, r.Spec.RootVolumeType) {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "rootVolumeType"), r.Spec.RootVolumeType, "field is immutable"))
 	}
 
 	// Once PublicIP is set, it is immutable.

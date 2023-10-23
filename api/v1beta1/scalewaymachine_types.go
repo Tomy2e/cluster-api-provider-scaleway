@@ -1,6 +1,9 @@
 package v1beta1
 
 import (
+	"fmt"
+
+	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
@@ -23,6 +26,12 @@ type ScalewayMachineSpec struct {
 	// +optional
 	RootVolumeSize *int64 `json:"rootVolumeSize,omitempty"`
 
+	// Type of the root volume. Can be local or block. Note that not all types
+	// of instances support local volumes.
+	// +kubebuilder:validation:Enum=local;block
+	// +optional
+	RootVolumeType *string `json:"rootVolumeType,omitempty"`
+
 	// Set to true to create and attach a public IP to the instance.
 	// Defaults to false.
 	// +optional
@@ -32,6 +41,22 @@ type ScalewayMachineSpec struct {
 	// If not set, the instance will be attached to the default security group.
 	// +optional
 	SecurityGroupName *string `json:"securityGroupName,omitempty"`
+}
+
+// ScalewayRootVolumeType returns the volume type to use for the root volume.
+func (s *ScalewayMachineSpec) ScalewayRootVolumeType() (instance.VolumeVolumeType, error) {
+	if s.RootVolumeType == nil {
+		return instance.VolumeVolumeTypeBSSD, nil
+	}
+
+	switch *s.RootVolumeType {
+	case "local":
+		return instance.VolumeVolumeTypeLSSD, nil
+	case "block":
+		return instance.VolumeVolumeTypeBSSD, nil
+	default:
+		return "", fmt.Errorf("unsupported root volume type: %s", *s.RootVolumeType)
+	}
 }
 
 // ScalewayMachineStatus defines the observed state of ScalewayMachine

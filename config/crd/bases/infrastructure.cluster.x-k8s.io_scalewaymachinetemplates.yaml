@@ -64,6 +64,13 @@ spec:
                           GB.
                         format: int64
                         type: integer
+                      rootVolumeType:
+                        description: Type of the root volume. Can be local or block.
+                          Note that not all types of instances support local volumes.
+                        enum:
+                        - local
+                        - block
+                        type: string
                       securityGroupName:
                         description: Name of the security group as specified in the
                           ScalewayCluster object. If not set, the instance will be

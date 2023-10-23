@@ -21,8 +21,7 @@ import (
 )
 
 var (
-	ErrPrivateIPNotFound     = errors.New("private IP not found in IPAM")
-	ErrInstanceNotStoppedYet = errors.New("instance is being stopped")
+	ErrPrivateIPNotFound = errors.New("private IP not found in IPAM")
 )
 
 var errMachineHasNoIP = errors.New("machine has no IP")
@@ -104,6 +103,11 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 			sgID = &sg.ID
 		}
 
+		volType, err := s.ScalewayMachine.Spec.ScalewayRootVolumeType()
+		if err != nil {
+			return nil, err
+		}
+
 		req := &instance.CreateServerRequest{
 			Zone:              s.Zone(),
 			Name:              s.Name(),
@@ -115,7 +119,7 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 			Volumes: map[string]*instance.VolumeServerTemplate{
 				"0": {
 					Size:       scw.SizePtr(rootSize),
-					VolumeType: instance.VolumeVolumeTypeBSSD,
+					VolumeType: instance.VolumeVolumeType(volType),
 					Boot:       scw.BoolPtr(true),
 				},
 			},
@@ -492,50 +496,60 @@ func (s *Service) Delete(ctx context.Context) error {
 		if err := s.ScalewayClient.Instance.DeleteIP(&instance.DeleteIPRequest{
 			Zone: server.Zone,
 			IP:   server.PublicIP.ID,
-		}); err != nil {
+		}, scw.WithContext(ctx)); err != nil {
 			return err
 		}
 	}
 
-	switch server.State {
-	case instance.ServerStateRunning, instance.ServerStateStoppedInPlace:
-		if _, err := s.ScalewayClient.Instance.ServerAction(&instance.ServerActionRequest{
-			Zone:     server.Zone,
-			ServerID: server.ID,
-			Action:   instance.ServerActionPoweroff,
-		}); err != nil {
-			return fmt.Errorf("failed to poweroff server: %w", err)
+	// Detach all non-boot volumes.
+	for _, vol := range server.Volumes {
+		if vol.Boot {
+			continue
 		}
 
-		return ErrInstanceNotStoppedYet
-	case instance.ServerStateStopping:
-		return ErrInstanceNotStoppedYet
-	case instance.ServerStateLocked:
-		return errors.New("instance is locked")
-	}
-
-	// Remove boot volume.
-	if v, ok := server.Volumes["0"]; ok && v.Boot {
 		if _, err := s.ScalewayClient.Instance.DetachVolume(&instance.DetachVolumeRequest{
 			Zone:     server.Zone,
-			VolumeID: v.ID,
-		}); err != nil {
-			return fmt.Errorf("failed to detach boot volume: %w", err)
-		}
-
-		if err := s.ScalewayClient.Instance.DeleteVolume(&instance.DeleteVolumeRequest{
-			Zone:     server.Zone,
-			VolumeID: v.ID,
-		}); err != nil {
-			return fmt.Errorf("failed to delete instance volume: %w", err)
+			VolumeID: vol.ID,
+		}, scw.WithContext(ctx)); err != nil {
+			return fmt.Errorf("failed to detach volume %q: %w", vol.ID, err)
 		}
 	}
 
-	if err := s.ScalewayClient.Instance.DeleteServer(&instance.DeleteServerRequest{
+	// If server is stopped, remove boot volume and delete the server.
+	if server.State == instance.ServerStateStopped {
+		// Remove boot volume.
+		if v, ok := server.Volumes["0"]; ok && v.Boot {
+			if _, err := s.ScalewayClient.Instance.DetachVolume(&instance.DetachVolumeRequest{
+				Zone:     server.Zone,
+				VolumeID: v.ID,
+			}, scw.WithContext(ctx)); err != nil {
+				return fmt.Errorf("failed to detach boot volume: %w", err)
+			}
+
+			if err := s.ScalewayClient.Instance.DeleteVolume(&instance.DeleteVolumeRequest{
+				Zone:     server.Zone,
+				VolumeID: v.ID,
+			}, scw.WithContext(ctx)); err != nil {
+				return fmt.Errorf("failed to delete instance volume: %w", err)
+			}
+		}
+
+		if err := s.ScalewayClient.Instance.DeleteServer(&instance.DeleteServerRequest{
+			Zone:     server.Zone,
+			ServerID: server.ID,
+		}, scw.WithContext(ctx)); err != nil {
+			return fmt.Errorf("failed to delete instance: %w", err)
+		}
+
+		return nil
+	}
+
+	if _, err := s.ScalewayClient.Instance.ServerAction(&instance.ServerActionRequest{
 		Zone:     server.Zone,
 		ServerID: server.ID,
-	}); err != nil {
-		return fmt.Errorf("failed to delete instance: %w", err)
+		Action:   instance.ServerActionTerminate,
+	}, scw.WithContext(ctx)); err != nil {
+		return fmt.Errorf("failed to terminate server: %w", err)
 	}
 
 	return nil

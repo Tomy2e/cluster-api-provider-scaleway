@@ -442,6 +442,11 @@ func (in *ScalewayMachineSpec) DeepCopyInto(out *ScalewayMachineSpec) {
 		*out = new(int64)
 		**out = **in
 	}
+	if in.RootVolumeType != nil {
+		in, out := &in.RootVolumeType, &out.RootVolumeType
+		*out = new(string)
+		**out = **in
+	}
 	if in.PublicIP != nil {
 		in, out := &in.PublicIP, &out.PublicIP
 		*out = new(bool)
