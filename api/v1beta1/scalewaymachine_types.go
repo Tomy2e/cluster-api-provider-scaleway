@@ -71,6 +71,8 @@ type ScalewayMachineStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="ProviderID",type="string",JSONPath=".spec.providerID",description="Provider ID"
+//+kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type",description="Type of instance"
 
 // ScalewayMachine is the Schema for the scalewaymachines API
 type ScalewayMachine struct {

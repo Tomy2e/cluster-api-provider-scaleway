@@ -328,6 +328,8 @@ type NetworkStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Endpoint",type="string",JSONPath=".spec.controlPlaneEndpoint",description="Endpoint of the control plane"
+//+kubebuilder:printcolumn:name="Region",type="string",JSONPath=".spec.region",description="Region of the cluster"
 
 // ScalewayCluster is the Schema for the scalewayclusters API
 type ScalewayCluster struct {

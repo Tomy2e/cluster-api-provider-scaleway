@@ -14,7 +14,16 @@ spec:
     singular: scalewaymachine
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - description: Provider ID
+      jsonPath: .spec.providerID
+      name: ProviderID
+      type: string
+    - description: Type of instance
+      jsonPath: .spec.type
+      name: Type
+      type: string
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: ScalewayMachine is the Schema for the scalewaymachines API

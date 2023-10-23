@@ -14,7 +14,16 @@ spec:
     singular: scalewaycluster
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - description: Endpoint of the control plane
+      jsonPath: .spec.controlPlaneEndpoint
+      name: Endpoint
+      type: string
+    - description: Region of the cluster
+      jsonPath: .spec.region
+      name: Region
+      type: string
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: ScalewayCluster is the Schema for the scalewayclusters API
