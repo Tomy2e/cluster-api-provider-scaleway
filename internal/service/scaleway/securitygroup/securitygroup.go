@@ -199,8 +199,8 @@ func (s *Service) ensureSecurityGroups(ctx context.Context, securityGroups []v1b
 					if _, err := s.ScalewayClient.Instance.UpdateSecurityGroup(&instance.UpdateSecurityGroupRequest{
 						Zone:                  zone,
 						SecurityGroupID:       instanceSG.ID,
-						InboundDefaultPolicy:  &inboundDefaultPolicy,
-						OutboundDefaultPolicy: &outboundDefaultPolicy,
+						InboundDefaultPolicy:  inboundDefaultPolicy,
+						OutboundDefaultPolicy: outboundDefaultPolicy,
 						EnableDefaultSecurity: scw.BoolPtr(false),
 					}, scw.WithContext(ctx)); err != nil {
 						return fmt.Errorf("failed to update security group: %w", err)

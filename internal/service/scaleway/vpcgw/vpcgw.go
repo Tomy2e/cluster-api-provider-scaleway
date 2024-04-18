@@ -119,7 +119,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 			PrivateNetworkID: pnID,
 			EnableDHCP:       scw.BoolPtr(true),
 			EnableMasquerade: true,
-			IpamConfig: &vpcgw.IpamConfig{
+			IpamConfig: &vpcgw.CreateGatewayNetworkRequestIpamConfig{
 				PushDefaultRoute: true,
 			},
 		}, scw.WithContext(ctx)); err != nil {
