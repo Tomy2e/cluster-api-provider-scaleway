@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	"github.com/scaleway/scaleway-sdk-go/api/lb/v1"
-	"github.com/scaleway/scaleway-sdk-go/api/marketplace/v1"
+	"github.com/scaleway/scaleway-sdk-go/api/marketplace/v2"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	"golang.org/x/exp/slices"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
@@ -81,7 +81,7 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 
 		imageID := s.ScalewayMachine.Spec.Image
 		if !isValidUUID(imageID) {
-			imageID, err = s.ScalewayClient.Marketplace.GetLocalImageIDByLabel(&marketplace.GetLocalImageIDByLabelRequest{
+			image, err := s.ScalewayClient.Marketplace.GetLocalImageByLabel(&marketplace.GetLocalImageByLabelRequest{
 				CommercialType: s.ScalewayMachine.Spec.Type,
 				Zone:           s.Zone(),
 				ImageLabel:     s.ScalewayMachine.Spec.Image,
@@ -89,6 +89,8 @@ func (s *Service) getOrCreateServer(ctx context.Context, ip *instance.IP) (*inst
 			if err != nil {
 				return nil, fmt.Errorf("failed to find image with label %q: %w", s.ScalewayMachine.Spec.Image, err)
 			}
+
+			imageID = image.ID
 		}
 
 		// Find security group ID if needed.
