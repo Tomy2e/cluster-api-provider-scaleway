@@ -1,3 +1,9 @@
+# IMPORTANT
+
+This version of cluster-api-provider-scaleway is now deprecated and replaced by the official version: <https://github.com/scaleway/cluster-api-provider-scaleway>.
+
+---
+
 # cluster-api-provider-scaleway
 
 ⚠ This is currently a proof-of-concept. Do NOT use in production! ⚠
